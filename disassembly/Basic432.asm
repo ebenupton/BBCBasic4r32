@@ -5315,10 +5315,12 @@ OSCLI   = $FFF7
         STA     L1B
 .L9C16
         LDY     L1B
-        INC     L1B
+.L9C18
         LDA     (L19),Y
+        INY
         CMP     #$20
-        BEQ     L9C16
+        BEQ     L9C18
+        STY     L1B
 
         CMP     #$3D
         BEQ     L9C52
