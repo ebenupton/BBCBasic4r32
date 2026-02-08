@@ -10287,13 +10287,18 @@ OSCLI   = $FFF7
         BRA     LB4E2
 
 .LB522
+        LDY     L0A
+        LDA     (L0B),Y
+        CMP     #$0D
+        BEQ     LB_bare
+        CMP     #$3A
+        BEQ     LB_bare
         JSR     L99C4
-
         BNE     LB530
-
+.LB_bare
+        STY     L1B
         LDX     L26
         BEQ     LB563
-
         BCS     LB56A
 
 .LB52D
