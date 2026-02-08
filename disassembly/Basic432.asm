@@ -10404,9 +10404,11 @@ OSCLI   = $FFF7
         LDA     L0527,X
         STY     L0B
         STA     L0C
-        JSR     L9C8A
+        JSR     L9C8E
 
-        JMP     L90D0
+        LDY     #$01
+        STY     L0A
+        JMP     L90D2
 
 .LB5DF
         TXA
