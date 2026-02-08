@@ -5401,8 +5401,9 @@ OSCLI   = $FFF7
         BNE     L9C2D
 
 .L9C80
-        CLC
         TYA
+.L9C81
+        CLC
         ADC     L0B
         STA     L0B
         BCC     L9C8A
@@ -5446,17 +5447,7 @@ OSCLI   = $FFF7
 .L9CB6
         LDA     #$03
 .L9CB8
-        CLC
-        ADC     L0B
-        STA     L0B
-        BCC     L9CC1
-
-        INC     L0C
-.L9CC1
-        LDY     #$01
-        STY     L0A
-.L9CC5
-        RTS
+        BRA     L9C81
 
 .L9CC6
         JMP     L904B
@@ -5523,7 +5514,7 @@ OSCLI   = $FFF7
         CMP     L21
         LDA     L2B
         SBC     L22
-        BCS     L9CC5
+        BCS     L9C92
 
         LDA     #$5B
         JSR     LBDD8
