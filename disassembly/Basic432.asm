@@ -156,7 +156,7 @@ OSCLI   = $FFF7
 
         EQUB    $E2,$13,$07
 
-        EQUS    "CLAUD",$00
+        EQUS    "BASIC",$00
 
         EQUS    "4r32",$00
 
