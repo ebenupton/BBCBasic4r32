@@ -347,9 +347,9 @@ OSCLI   = $FFF7
         STX     L0400
         DEX
         STX     L0401
-        LDA     #$B2
+        LDA     #LO(LB2B2)
         STA     L0202
-        LDA     #$B2
+        LDA     #HI(LB2B2)
         STA     L0203
         CLI
         JMP     L8FF2
@@ -1078,6 +1078,7 @@ OSCLI   = $FFF7
         SBC     L3D
         JMP     L8304
 
+.L8513
         EQUS    "AND"
 
         EQUB    $80,$00
@@ -2721,9 +2722,9 @@ OSCLI   = $FFF7
         CMP     #$58
         BCS     L8EE2
 
-        LDX     #$13
+        LDX     #LO(L8513)
         STX     L39
-        LDX     #$85
+        LDX     #HI(L8513)
         STX     L3A
 .L8F03
         LDY     #$00
@@ -6518,7 +6519,7 @@ OSCLI   = $FFF7
         PHP
         ASL     A
         ASL     A
-        ADC     #$BC
+        ADC     #LO(LBFBC)
         JSR     LA572
 
         DEC     L30
@@ -7208,7 +7209,7 @@ OSCLI   = $FFF7
         BRA     LA57E
 
 .LA572
-        LDY     #$BF
+        LDY     #HI(LBF82)
         BRA     LA57A
 
 .LA576
@@ -7257,7 +7258,7 @@ OSCLI   = $FFF7
 .LA5B2
         STA     L4C
 .LA5B4
-        LDY     #$BF
+        LDY     #HI(LBF82)
 .LA5B6
         STA     L4A
         STY     L4B
@@ -7365,7 +7366,7 @@ OSCLI   = $FFF7
         JMP     L81EA
 
 .LA62F
-        LDA     #$B9
+        LDA     #LO(LBFB9)
 .LA631
         JSR     LA5B4
 
@@ -7529,7 +7530,7 @@ OSCLI   = $FFF7
         JSR     LA901
 
 .LA6FF
-        LDA     #$90
+        LDA     #LO(LBF90)
         JSR     LA5B4
 
 .LA704
@@ -7721,7 +7722,7 @@ OSCLI   = $FFF7
 
         JSR     L82E6
 
-        LDA     #$9F
+        LDA     #LO(LBF9F)
         JSR     LA5B4
 
         JSR     LA9A3
@@ -7884,7 +7885,7 @@ OSCLI   = $FFF7
 
         ADC     #$F1
         STA     L4C
-        LDA     #$BE
+        LDA     #LO(LBFBE)
         JSR     LA631
 
         JSR     LA541
@@ -8062,15 +8063,15 @@ OSCLI   = $FFF7
 .LA9B5
         JSR     L979F
 
-        LDA     #$CA
+        LDA     #LO(LBFCA)
         BRA     LA9C1
 
 .LA9BC
         JSR     LA7AC
 
-        LDA     #$82
+        LDA     #LO(LBF82)
 .LA9C1
-        LDY     #$BF
+        LDY     #HI(LBF82)
 .LA9C3
         STY     L4B
         STA     L4A
@@ -8079,13 +8080,13 @@ OSCLI   = $FFF7
 .LA9CA
         JSR     L979F
 
-        LDA     #$CF
+        LDA     #LO(LBFCF)
         BRA     LA9C1
 
 .LA9D1
         JSR     L979F
 
-        LDA     #$8B
+        LDA     #LO(LBF8B)
         JSR     LAA50
 
         BCC     LAA07
@@ -8134,7 +8135,7 @@ OSCLI   = $FFF7
         JSR     L979F
 
 .LAA1A
-        LDA     #$9A
+        LDA     #LO(LBF9A)
         JSR     LAA50
 
         BCC     LA9F8
@@ -9843,6 +9844,7 @@ OSCLI   = $FFF7
 .LB2B1
         RTS
 
+.LB2B2
         LDX     #$FF
         STX     L28
         TXS
@@ -9873,12 +9875,13 @@ OSCLI   = $FFF7
         JMP     L90D0
 
 .LB2E0
-        LDA     #$E9
+        LDA     #LO(LB2E9)
         STA     L16
-        LDA     #$B2
+        LDA     #HI(LB2E9)
         STA     L17
         RTS
 
+.LB2E9
         EQUB    $F6,$3A,$E7,$9E,$F1,$22
 
         EQUS    " at line "
@@ -12085,9 +12088,9 @@ OSCLI   = $FFF7
         STX     L45
         LDX     L13
         STX     L46
-        LDX     #$E7
+        LDX     #LO(L80E7)
         STX     L3D
-        LDX     #$80
+        LDX     #HI(L80E7)
         STX     L3E
         LDX     L18
         STX     L42
@@ -12238,16 +12241,35 @@ LBEFE = LBEFD+1
         EQUW    LA80B,LA634,LA6E4,LA70A
         EQUW    LAD10,LA57E,LA54D
 
-        EQUB    $4A,$2E,$7F,$5E,$5B,$D8,$AA,$00
-        EQUB    $CA,$98,$80,$81,$22,$F9,$83,$6E
+        EQUB    $4A,$2E
+.LBF82
+        EQUB    $7F,$5E,$5B,$D8,$AA,$00
+        EQUB    $CA,$98,$80
+.LBF8B
+        EQUB    $81,$22,$F9,$83,$6E
+.LBF90
         EQUB    $81,$49,$0F,$DA,$A2,$21,$B3,$B2
-        EQUB    $87,$80,$82,$38,$AA,$3B,$29,$80
+        EQUB    $87,$80
+.LBF9A
+        EQUB    $82,$38,$AA,$3B,$29
+.LBF9F
+        EQUB    $80
         EQUB    $31,$72,$17,$F7,$D1,$5F,$5B,$E6
         EQUB    $FF,$66,$2B,$CC,$77,$6D,$06,$37
         EQUB    $BD,$73,$51,$B7,$17,$7A,$23,$D7
-        EQUB    $0A,$81,$00,$00,$00,$00,$82,$40
+        EQUB    $0A
+.LBFB9
+        EQUB    $81,$00,$00
+.LBFBC
+        EQUB    $00,$00
+.LBFBE
+        EQUB    $82,$40
         EQUB    $00,$00,$00,$9A,$D4,$82,$7F,$B9
-        EQUB    $FF,$78,$7B,$0E,$FA,$35,$12,$86
+        EQUB    $FF,$78
+.LBFCA
+        EQUB    $7B,$0E,$FA,$35,$12
+.LBFCF
+        EQUB    $86
         EQUB    $65,$2E,$E0,$D3,$7E,$88,$88,$88
         EQUB    $89,$7B,$8C,$6F,$2D,$59,$81,$99
         EQUB    $99,$99,$9A,$F3,$9E,$7B,$77,$81
