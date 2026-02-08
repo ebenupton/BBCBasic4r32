@@ -156,7 +156,7 @@ OSCLI   = $FFF7
 
         EQUB    $E2,$13,$07
 
-        EQUS    "BASIC",$00
+        EQUS    "CLAUD",$00
 
         EQUS    "4r32",$00
 
@@ -170,8 +170,7 @@ OSCLI   = $FFF7
 .L802C
         PHA
         TAX
-        TYA
-        PHA
+        PHY
         CPX     #$09
         BEQ     L804C
 
@@ -190,7 +189,7 @@ OSCLI   = $FFF7
         LDY     #$00
         JSR     OSBYTE
 
-        JMP     L806A
+        BRA     L806A
 
 .L804C
         LDA     (LF2),Y
@@ -217,8 +216,7 @@ OSCLI   = $FFF7
         JSR     L80D8
 
 .L806A
-        PLA
-        TAY
+        PLY
         LDX     LF4
         PLA
         RTS
@@ -6693,10 +6691,8 @@ OSCLI   = $FFF7
 .LA2CA
         ORA     #$30
 .LA2CC
-        PHX
-        LDX     L36
-        STA     L0600,X
-        PLX
+        LDY     L36
+        STA     L0600,Y
         INC     L36
         RTS
 
@@ -6704,8 +6700,6 @@ OSCLI   = $FFF7
         CLC
         LDA     #$FF
         JMP     L82DD
-
-        RTS
 
 .LA2DD
         STZ     L31
@@ -9385,7 +9379,7 @@ OSCLI   = $FFF7
         INY
         JSR     L995A
 
-        JMP     LB0B0
+        BRA     LB0B0
 
 .LB04A
         BRK
