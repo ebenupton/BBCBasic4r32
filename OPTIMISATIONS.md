@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 19 changes to the ROM, targeting the 65C02. They
+This memo describes 20 changes to the ROM, targeting the 65C02. They
 fall into seven categories (byte-saving, space-skip restructuring, the
 bare-NEXT fast path, the NEXT continuation optimisation, second-round
 byte savings, a bug fix plus error-message compression, and a
@@ -67,7 +67,8 @@ those bytes): the factor evaluator delivers a single-digit integer
 constant directly when the next character cannot continue a numeric
 literal, bypassing the full float-capable parser at LA2DD. Saves ~72
 cycles per single-digit constant — `A%=A%+1` loops run ~5% faster —
-at a cost of ~32 cycles on multi-digit, decimal or exponent literals.
+at a cost (after Change 20) of only ~8 cycles on multi-digit, decimal
+or exponent literals.
 
 Net effect: the ROM uses all 16384 bytes exactly, of which 1 byte
 remains free in the SKIPTO pool. Assignment parsing benefits from
@@ -734,8 +735,8 @@ LA303/LA34C — lowercase 'e' is not an exponent marker), it restores
 the entry state (DEY, TXA) and falls into the original `JSR LA2DD`.
 The peek tests the digit range first, since a digit is the most common
 continuation, and the high-terminator leg falls through the '.'
-comparison (which cannot match a character above ':'), so the
-fall-back costs ~32 cycles instead of ~40 with no extra bytes.
+comparison (which cannot match a character above ':'). Change 20
+below cuts the fall-back cost further, to ~8 cycles.
 Otherwise it delivers the result directly, reproducing LA2DD's integer
 exit contract at LA36B precisely: L2A = digit value, L2B–L2D = 0,
 A = 1 (integer type), carry set. L1B needs no adjustment — the factor
@@ -746,14 +747,59 @@ variable-fetch path LB1DE) already leave X/Y with different values per
 path, so no caller can be relying on them.
 
 **Costs:** 43 bytes (from the SKIPTO pool). **Saves:** ~72 cycles per
-single-digit literal (measured); costs ~32 cycles per multi-digit,
-decimal-point, or exponent literal on the peek-and-fall-back path.
-Measured on 5000-iteration loops (centiseconds, Master 128 timing):
-`A%=A%+1` 355→337 (−5%); `A%=A%+12345` 468→476 (+1.7%);
-`REPEAT S%=S%+1 UNTIL S%=5000` 670→659 (its `+1` wins outweigh the
-multi-digit `5000` penalty). Verified with 23 dedicated literal edge
+single-digit literal (measured). The fall-back penalty for multi-digit,
+decimal-point and exponent literals was ~32 cycles as first shipped;
+Change 20 reduces it to ~8. Measured on 5000-iteration loops
+(centiseconds, Master 128 timing, with Change 20): `A%=A%+1` 355→335
+(−5%); `A%=A%+12345` 468→470; `REPEAT S%=S%+1 UNTIL S%=5000` 670→653. Verified with 23 dedicated literal edge
 cases (multi-digit, `1.5`, `.5`, `5.`, `1E2`, `2E-1`, `VAL`, `DATA`,
 hex, negatives, terminators) plus the full 52-check suite.
+
+---
+
+## Change 20: LA2DD entry restructure — near-free literal fall-back
+
+**Location:** LA2DD entry (label LNUMD added), LNUMF's fall-back
+(LNUMS/LNUMX), LMSGX skip/print loops, and a new shared pointer-copy
+subroutine LCPYW used by L97A9 and L9C0A.
+
+**Rationale:** Change 19's fall-back re-entered LA2DD from the top,
+re-running the first-character classification it had already done.
+Three coordinated edits eliminate almost all of the remaining penalty:
+
+1. **LA2DD entry restructured, checks before setup.** `EOR #$30`
+   classifies digit / dot / reject in one test (digits map to their
+   value directly, replacing the old CMP/CMP/SBC chain), and the state
+   setup (STZs, L49=$FF) moves after the checks, followed by a 2-byte
+   test that routes the leading-'.' marker to LA348. A new entry point
+   `LNUMD` (at the setup) takes A = digit value and skips the checks.
+   The fail path is unaffected: L82DD only writes state, so it does
+   not care that the setup no longer precedes rejection. Net: VAL,
+   READ and every other LA2DD caller get slightly *faster* (−2
+   cycles), and the entry is 5 bytes larger.
+2. **The fall-back becomes `DEY / TXA / JMP LNUMD`.** LNUMF now keeps
+   the digit *value* in X (its own pre-check uses the same EOR trick,
+   which also deletes the old `AND #$0F`). Jumping rather than calling
+   works because every success exit of LA2DD sets carry (LA36B and
+   LA3AA both end SEC/RTS) and the only CLC exit is the entry
+   rejection, unreachable from LNUMD — so LA2DD's RTS returns straight
+   to the factor's caller with the identical contract, skipping the
+   BCC/RTS tail.
+3. **Funding (−7 bytes):** the LMSGX dictionary scan/print loops are
+   rotated to test the terminator with LDA's own flags (−2 bytes, and
+   slightly faster; error path only), and the 6-instruction statement-
+   pointer copy shared by the PROC dispatch (L97A9) and L9C0A is
+   extracted as `LCPYW` (−5 bytes; +10 cycles measured per PROC call,
+   ~0.7% of a minimal PROC's cost — the third copy at L9DF3 stays
+   inline because the expression-evaluator entry is too hot).
+
+Measured (5000-iteration loops): `A%=A%+12345` 475→470 (fall-back
+penalty ~32→~8 cycles vs the 468 pre-Change-19 baseline);
+`REPEAT S%=S%+1 UNTIL S%=5000` 659→653; PROC call +10 cycles;
+`VAL` unchanged. Full 52-check suite and the literal edge-case suite
+(including `.5`, `5.`, `1E2`, `VAL(".5")`) pass.
+
+**Costs:** net −2 bytes (pool grows to 3).
 
 ---
 
@@ -779,10 +825,8 @@ pinned at its original address, because:
   flow boundary before that group, rather than LBEFD).
 
 SKIPTO makes the assembler absorb any net byte change automatically
-and fail the build on overrun. **The pool currently holds 1 free
-byte** ($BE94) after Change 19 spent 43 of the 44 recovered by
-Changes 15–18: the next feature needs new byte mining first (the
-token-match merge below is the cheapest known option).
+and fail the build on overrun. **The pool currently holds 3 free
+bytes** ($BE92–$BE94).
 
 ---
 
@@ -809,11 +853,12 @@ token-match merge below is the cheapest known option).
 | 17 | 11841 | LBD77 | 0 | (bug fix: LIST/AND, ABS) |
 | 18 | (50 messages) | LMSGX/LDICT | -40 | ~30/substring, error path only |
 | 19 | 8818 | LAD9C/LNUMF | +43 | **~72 per single-digit literal** |
-| | | (SKIPTO pool before LBE95) | +1 | -- |
+| 20 | 6679, 8848 | LA2DD/LNUMD/LCPYW | -2 | fall-back ~32→~8 cycles |
+| | | (SKIPTO pool before LBE95) | +3 | -- |
 | | | **Total** | **0** | |
 
-With all applicable changes applied (1–5, 11–19), the ROM uses all
-16384 bytes exactly, 1 of which is free space in the SKIPTO pool. Assignment parsing benefits from
+With all applicable changes applied (1–5, 11–20), the ROM uses all
+16384 bytes exactly, 3 of which are free space in the SKIPTO pool. Assignment parsing benefits from
 faster space-skipping. Tight FOR/NEXT loops with bare `NEXT` (followed
 by end-of-line or `:`) save approximately 49 cycles per iteration.
 String assignment saves 2 cycles per store. Single-digit constants in
@@ -838,10 +883,10 @@ further clean wins. For the record:
 - **Sign-pack merge** (`LDA L2E/EOR L31/AND #$80/EOR L31` ×3 at lines
   7175, 10004, 11602): would save ~6 bytes but adds 12 cycles to every
   real-variable store — a bad trade for a hot path.
-- **Token-match merge** (lines 2315/2334, LIST path): would save ~5
-  bytes at +12 cycles on a cold path; viable if a future change needs
-  more bytes than the padding pool provides, but needs a final
-  flags-liveness check on L8D86 before use.
+- **Token-match merge** (LIST path): REJECTED on closer inspection —
+  the candidate block contains a `BNE L8CE3` non-local branch, so a
+  JSR extraction would leave a stale return address on the stack;
+  restructured variants yield at most +1 byte.
 - **UNTIL loop-back micro-optimisation:** reusing the Change-14 trick
   costs +6 bytes for 3 cycles per REPEAT iteration and would need the
   L0A=1 invariant threaded past the shared LB762 entry; not worth it.
