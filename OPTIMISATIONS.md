@@ -67,7 +67,7 @@ those bytes): the factor evaluator delivers a single-digit integer
 constant directly when the next character cannot continue a numeric
 literal, bypassing the full float-capable parser at LA2DD. Saves ~72
 cycles per single-digit constant — `A%=A%+1` loops run ~5% faster —
-at a cost of ~40 cycles on multi-digit, decimal or exponent literals.
+at a cost of ~32 cycles on multi-digit, decimal or exponent literals.
 
 Net effect: the ROM uses all 16384 bytes exactly, of which 1 byte
 remains free in the SKIPTO pool. Assignment parsing benefits from
@@ -732,6 +732,10 @@ The fast path first confirms the character is an actual digit
 'E' (exactly the continuation set accepted by LA2DD's loop at
 LA303/LA34C — lowercase 'e' is not an exponent marker), it restores
 the entry state (DEY, TXA) and falls into the original `JSR LA2DD`.
+The peek tests the digit range first, since a digit is the most common
+continuation, and the high-terminator leg falls through the '.'
+comparison (which cannot match a character above ':'), so the
+fall-back costs ~32 cycles instead of ~40 with no extra bytes.
 Otherwise it delivers the result directly, reproducing LA2DD's integer
 exit contract at LA36B precisely: L2A = digit value, L2B–L2D = 0,
 A = 1 (integer type), carry set. L1B needs no adjustment — the factor
@@ -742,11 +746,11 @@ variable-fetch path LB1DE) already leave X/Y with different values per
 path, so no caller can be relying on them.
 
 **Costs:** 43 bytes (from the SKIPTO pool). **Saves:** ~72 cycles per
-single-digit literal (measured); costs ~40 cycles per multi-digit,
+single-digit literal (measured); costs ~32 cycles per multi-digit,
 decimal-point, or exponent literal on the peek-and-fall-back path.
 Measured on 5000-iteration loops (centiseconds, Master 128 timing):
-`A%=A%+1` 355→337 (−5%); `A%=A%+12345` 468→478 (+2%);
-`REPEAT S%=S%+1 UNTIL S%=5000` 670→661 (its `+1` wins outweigh the
+`A%=A%+1` 355→337 (−5%); `A%=A%+12345` 468→476 (+1.7%);
+`REPEAT S%=S%+1 UNTIL S%=5000` 670→659 (its `+1` wins outweigh the
 multi-digit `5000` penalty). Verified with 23 dedicated literal edge
 cases (multi-digit, `1.5`, `.5`, `5.`, `1E2`, `2E-1`, `VAL`, `DATA`,
 hex, negatives, terminators) plus the full 52-check suite.

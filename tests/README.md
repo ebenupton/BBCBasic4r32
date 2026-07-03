@@ -17,7 +17,7 @@ with `LN1000=6.90775639`, `LNB=3.07692308E-2`, `ATNB=0.753140099`
 (these are the ROM's documented pre-existing values, not the
 mathematically correct ones). Benchmark expectations (centiseconds,
 Master 128): baseline B1=266 B2=355 B3=706 B4=670; with Change 19
-(single-digit literal fast path) B2≈337 and B4≈661, others unchanged.
+(single-digit literal fast path) B2≈337 and B4≈659, others unchanged.
 
 Error messages are compressed (Change 18): after any change to the
 message dictionary, also run an error battery covering each entry —

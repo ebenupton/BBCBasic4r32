@@ -8853,17 +8853,18 @@ OSCLI   = $FFF7
         TAX
         INY
         LDA     (L19),Y
-        CMP     #$45
-        BEQ     LNUMS
-
-        CMP     #$2E
-        BEQ     LNUMS
-
         CMP     #$30
-        BCC     LNUMI
+        BCC     LNUM1
 
         CMP     #$3A
         BCC     LNUMS
+
+        CMP     #$45
+        BEQ     LNUMS
+
+.LNUM1
+        CMP     #$2E
+        BEQ     LNUMS
 
 .LNUMI
         TXA
