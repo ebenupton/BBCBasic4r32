@@ -494,10 +494,9 @@ OSCLI   = $FFF7
 .L81EA
         BRK
         EQUB    $12
+        EQUS    "Division by ze",$18,$00
 
-        EQUS    "Division by zero"
 
-        EQUB    $00
 
 .L81FD
         ROL     A
@@ -700,7 +699,6 @@ OSCLI   = $FFF7
         STA     L31
         RTS
 
-        LDA     L31
 .L8304
         BMI     L8346
 
@@ -1998,10 +1996,9 @@ OSCLI   = $FFF7
 
         BRK
         EQUB    $01
+        EQUS    $15,$0E,$00
 
-        EQUS    "Out of range"
 
-        EQUB    $00
 
 .L8B98
         TYA
@@ -2036,10 +2033,9 @@ OSCLI   = $FFF7
 .L8BB6
         BRK
         EQUB    $02
+        EQUS    "Byte",$00
 
-        EQUS    "Byte"
 
-        EQUB    $00
 
 .L8BBD
         CPX     #$41
@@ -2092,10 +2088,9 @@ OSCLI   = $FFF7
 .L8BF9
         BRK
         EQUB    $03
+        EQUS    "Index",$00
 
-        EQUS    "Index"
 
-        EQUB    $00
 
 .L8C01
         JSR     L9330
@@ -2888,10 +2883,9 @@ OSCLI   = $FFF7
 .L8FBB
         BRK
         EQUB    $05
+        EQUS    $8D,",",$00
 
-        EQUS    $8D,","
 
-        EQUB    $00
 
 .L8FC0
         JSR     LBE17
@@ -3205,28 +3199,27 @@ OSCLI   = $FFF7
 
         BRK
         EQUB    $00
-
         EQUS    $FA
+
 
 .L914F
         BRK
         EQUB    $07
+        EQUS    $0F,$A4
 
-        EQUS    "No ",$A4
 
 .L9155
         BRK
         EQUB    $06
+        EQUS    "Type mis",$16
 
-        EQUS    "Type mismatch"
 
 .L9164
         BRK
         EQUB    $00
+        EQUS    $0F,$18,"om",$00
 
-        EQUS    "No room"
 
-        EQUB    $00
 
 .L916E
         JSR     LBD26
@@ -3322,7 +3315,6 @@ OSCLI   = $FFF7
 .L91EF
         JSR     LBE6B
 
-        CPY     #$00
         BEQ     L9201
 
 .L91F6
@@ -3619,10 +3611,9 @@ OSCLI   = $FFF7
 .L9357
         BRK
         EQUB    $09
+        EQUS    $8D,$22,$00
 
-        EQUB    $8D,$22
 
-        EQUB    $00
 
 .L935C
         JSR     L8F9D
@@ -3828,16 +3819,15 @@ OSCLI   = $FFF7
 .L9476
         BRK
         EQUB    $00
+        EQUS    $CC,$11
 
-        EQUS    $CC," space"
 
 .L947F
         BRK
         EQUB    $00
+        EQUS    "Silly",$00
 
-        EQUS    "Silly"
 
-        EQUB    $00
 
 .L9487
         JSR     L943E
@@ -4103,10 +4093,9 @@ OSCLI   = $FFF7
 .L95F1
         BRK
         EQUB    $0A
+        EQUS    $13,$DE,$00
 
-        EQUS    "Bad ",$DE
 
-        EQUB    $00
 
 .L95F9
         JSR     L8F9D
@@ -4262,10 +4251,9 @@ OSCLI   = $FFF7
 .L96CA
         BRK
         EQUB    $0B
+        EQUS    $DE,$11,$00
 
-        EQUS    $DE," space"
 
-        EQUB    $00
 
 .L96D4
         JSR     L977E
@@ -4502,16 +4490,15 @@ OSCLI   = $FFF7
 .L9801
         BRK
         EQUB    $0C
-
         EQUS    "Not ",$EA
+
 
 .L9808
         BRK
         EQUB    $19
+        EQUS    $13,$EB,$00
 
-        EQUS    "Bad ",$EB
 
-        EQUB    $00
 
 .L9810
         JSR     L9332
@@ -4658,7 +4645,7 @@ OSCLI   = $FFF7
         LDA     (LFD),Y
         BEQ     L98C0
 
-        JSR     LBD77
+        JSR     LMSGX
 
         INY
         BNE     L98CB
@@ -4855,10 +4842,9 @@ OSCLI   = $FFF7
 .L99BA
         BRK
         EQUB    $08
+        EQUS    "$",$0E,$00
 
-        EQUS    "$ range"
 
-        EQUB    $00
 
 .L99C4
         LDA     L0B
@@ -5067,10 +5053,9 @@ OSCLI   = $FFF7
 .L9AC1
         BRK
         EQUB    $0E
+        EQUS    "Array",$00
 
-        EQUS    "Array"
 
-        EQUB    $00
 
 .L9AC9
         INX
@@ -5228,10 +5213,9 @@ OSCLI   = $FFF7
 .L9BAE
         BRK
         EQUB    $0F
+        EQUS    "Subscript",$00
 
-        EQUS    "Subscript"
 
-        EQUB    $00
 
 .L9BBA
         LDY     #$01
@@ -5328,28 +5312,27 @@ OSCLI   = $FFF7
 .L9C24
         BRK
         EQUB    $04
-
         EQUS    "Mistake"
+
 
 .L9C2D
         BRK
         EQUB    $10
+        EQUS    "S",$17," er",$18,"r"
 
-        EQUS    "Syntax error"
 
 .L9C3B
         BRK
         EQUB    $0D
+        EQUS    $0F,$F2
 
-        EQUS    "No ",$F2
 
 .L9C41
         BRK
         EQUB    $11
+        EQUS    "Escape",$00
 
-        EQUS    "Escape"
 
-        EQUB    $00
 
 .L9C4A
         JSR     L8F92
@@ -5875,10 +5858,9 @@ OSCLI   = $FFF7
 .L9ECB
         BRK
         EQUB    $13
+        EQUS    "String too long",$00
 
-        EQUS    "String too long"
 
-        EQUB    $00
 
 .L9EDD
         JSR     LBC91
@@ -7508,10 +7490,9 @@ OSCLI   = $FFF7
 .LA6F2
         BRK
         EQUB    $14
+        EQUS    "Too big",$00
 
-        EQUS    "Too big"
 
-        EQUB    $00
 
 .LA6FC
         JSR     LA901
@@ -7659,14 +7640,14 @@ OSCLI   = $FFF7
 
         BRK
         EQUB    $16
+        EQUS    "Log",$0E
 
-        EQUS    "Log range"
 
 .LA7C0
         BRK
         EQUB    $15
+        EQUS    "-ve ",$18,"o"
 
-        EQUS    "-ve roo"
 
 .LA7C9
         EQUS    "t"
@@ -8107,16 +8088,15 @@ OSCLI   = $FFF7
 
         BRK
         EQUB    $18
+        EQUS    "Exp",$0E
 
-        EQUS    "Exp range"
 
 .LAA07
         BRK
         EQUB    $17
+        EQUS    "Accuracy lost",$00
 
-        EQUS    "Accuracy lost"
 
-        EQUB    $00
 
 .LAA17
         JSR     L979F
@@ -8840,7 +8820,7 @@ OSCLI   = $FFF7
         BCS     LADAC
 
         CMP     #$2E
-        BCS     LADB6
+        BCS     LNUMF
 
         CMP     #$26
         BEQ     LADF9
@@ -8856,6 +8836,49 @@ OSCLI   = $FFF7
 
         JMP     LB1DE
 
+; Single-digit decimal literal fast path. On entry A = first char
+; ($2E-$3E from the dispatch above), Y = its offset, L1B = offset+1.
+; If A is a digit and the next character cannot continue a numeric
+; literal (digit, '.', or 'E'), deliver the integer directly with the
+; exact exit state of LA2DD's integer exit at LA36B: A=1 (integer
+; type), carry set, L2A-L2D = value, L1B already at the terminator.
+; X/Y are scratch (LA2DD's own exits leave them differently per path).
+.LNUMF
+        CMP     #$30
+        BCC     LADB6
+
+        CMP     #$3A
+        BCS     LADB6
+
+        TAX
+        INY
+        LDA     (L19),Y
+        CMP     #$45
+        BEQ     LNUMS
+
+        CMP     #$2E
+        BEQ     LNUMS
+
+        CMP     #$30
+        BCC     LNUMI
+
+        CMP     #$3A
+        BCC     LNUMS
+
+.LNUMI
+        TXA
+        AND     #$0F
+        STA     L2A
+        STZ     L2B
+        STZ     L2C
+        STZ     L2D
+        LDA     #$01
+        SEC
+        RTS
+
+.LNUMS
+        DEY
+        TXA
 .LADB6
         JSR     LA2DD
 
@@ -8879,22 +8902,21 @@ OSCLI   = $FFF7
 .LADCE
         BRK
         EQUB    $1A
+        EQUS    $12,$14
 
-        EQUS    "No such variable"
 
 .LADE0
         BRK
         EQUB    $1B
-
         EQUS    $8D,")"
+
 
 .LADE4
         BRK
         EQUB    $1C
+        EQUS    $13,"Hex",$00
 
-        EQUS    "Bad Hex"
 
-        EQUB    $00
 
 .LADEE
         JSR     L9DFF
@@ -9284,10 +9306,9 @@ OSCLI   = $FFF7
         STA     L0B
         BRK
         EQUB    $1D
+        EQUS    $12,$A4,"/",$F2,$00
 
-        EQUS    "No such ",$A4,"/",$F2
 
-        EQUB    $00
 
 .LAFD5
         LDA     L18
@@ -9377,10 +9398,9 @@ OSCLI   = $FFF7
 .LB04A
         BRK
         EQUB    $1E
+        EQUS    $13,"call",$00
 
-        EQUS    "Bad call"
 
-        EQUB    $00
 
 .LB055
         LDA     #$A4
@@ -9592,10 +9612,9 @@ OSCLI   = $FFF7
         STA     L0B
         BRK
         EQUB    $1F
+        EQUS    "Arguments",$00
 
-        EQUS    "Arguments"
 
-        EQUB    $00
 
 .LB17E
         JSR     LBD26
@@ -10333,16 +10352,15 @@ OSCLI   = $FFF7
 
         BRK
         EQUB    $21
+        EQUS    "Can't ",$16," ",$E3
 
-        EQUS    "Can't match ",$E3
 
 .LB563
         BRK
         EQUB    $20
+        EQUS    $0F,$E3,$00
 
-        EQUS    "No ",$E3
 
-        EQUB    $00
 
 .LB56A
         LDA     L0519,X
@@ -10467,22 +10485,21 @@ OSCLI   = $FFF7
 .LB629
         BRK
         EQUB    $22
+        EQUS    $E3," ",$14
 
-        EQUS    $E3," variable"
 
 .LB635
         BRK
         EQUB    $23
+        EQUS    $10,$E3,"s"
 
-        EQUS    "Too many ",$E3,"s"
 
 .LB642
         BRK
         EQUB    $24
+        EQUS    $0F,$B8,$00
 
-        EQUS    "No ",$B8
 
-        EQUB    $00
 
 .LB649
         JSR     L997D
@@ -10618,16 +10635,15 @@ OSCLI   = $FFF7
 .LB723
         BRK
         EQUB    $25
+        EQUS    $10,$E4,"s"
 
-        EQUS    "Too many ",$E4,"s"
 
 .LB730
         BRK
         EQUB    $26
+        EQUS    $0F,$E4,$00
 
-        EQUS    "No ",$E4
 
-        EQUB    $00
 
 .LB737
         JSR     L9C6A
@@ -10795,22 +10811,21 @@ OSCLI   = $FFF7
 
         BRK
         EQUB    $28
+        EQUS    $EE,$0E
 
-        EQUS    $EE," range"
 
 .LB81A
         BRK
         EQUB    $27
+        EQUS    $EE," s",$17
 
-        EQUS    $EE," syntax"
 
 .LB824
         BRK
         EQUB    $29
+        EQUS    $12,"line",$00
 
-        EQUS    "No such line"
 
-        EQUB    $00
 
 .LB833
         STY     L1B
@@ -11204,28 +11219,27 @@ OSCLI   = $FFF7
 .LBA21
         BRK
         EQUB    $2A
+        EQUS    $15," ",$DC
 
-        EQUS    "Out of ",$DC
 
 .LBA2B
         BRK
         EQUB    $2B
+        EQUS    $0F,$F5
 
-        EQUS    "No ",$F5
 
 .LBA31
         BRK
         EQUB    $2D
-
         EQUS    $8D,"#"
+
 
 .LBA35
         BRK
         EQUB    $2C
+        EQUS    $10,$F5,"s",$00
 
-        EQUS    "Too many ",$F5,"s"
 
-        EQUB    $00
 
 .LBA43
         INY
@@ -11471,10 +11485,9 @@ OSCLI   = $FFF7
 
         BRK
         EQUB    $00
+        EQUS    $86,$11,$00
 
-        EQUS    $86," space"
 
-        EQUB    $00
 
 .LBB9B
         LDA     (L39),Y
@@ -11840,9 +11853,9 @@ OSCLI   = $FFF7
         CMP     #$80
         BCC     LBDD4
 
-        LDA     #$13
+        LDA     #LO(L8513)
         STA     L38
-        LDA     #$85
+        LDA     #HI(L8513)
         STA     L39
         PHY
 .LBD86
@@ -12034,8 +12047,8 @@ OSCLI   = $FFF7
         LDA     #$06
         STA     L38
 .LBE6B
-        LDY     L36
         LDA     #$0D
+        LDY     L36
         STA     L0600,Y
         RTS
 
@@ -12065,6 +12078,72 @@ OSCLI   = $FFF7
         STX     L3B
         STY     L3C
         RTS
+
+; Error-message dictionary expander. The REPORT print loop calls LMSGX
+; for each message byte: codes $0E-$1F expand to LDICT entry (code-$0D)
+; (entries are $00-terminated and may themselves contain escape codes
+; or keyword tokens - LMSGX recurses). Codes $01-$0D pass through as
+; ordinary control characters: the ROM's copyright string, printed by
+; REPORT after a clean start, legitimately contains $0A,$0D.
+.LMSGX
+        CMP     #$20
+        BCS     LMSG0
+
+        CMP     #$0E
+        BCS     LMSG1
+
+.LMSG0
+        JMP     LBD77
+
+.LMSG1
+        PHY
+        SBC     #$0D
+        TAX
+        LDY     #$00
+        BRA     LMSG3
+
+.LMSG2
+        LDA     LDICT,Y
+        INY
+        CMP     #$01
+        BCS     LMSG2
+
+.LMSG3
+        DEX
+        BNE     LMSG2
+
+.LMSG4
+        LDA     LDICT,Y
+        BEQ     LMSG5
+
+        JSR     LMSGX
+
+        INY
+        BNE     LMSG4
+
+.LMSG5
+        PLY
+        RTS
+
+.LDICT
+        EQUS    " range",$00
+        EQUS    "No ",$00
+        EQUS    "Too many ",$00
+        EQUS    " space",$00
+        EQUS    $0F,"such ",$00
+        EQUS    "Bad ",$00
+        EQUS    "variable",$00
+        EQUS    "Out of",$00
+        EQUS    "match",$00
+        EQUS    "yntax",$00
+        EQUS    "ro",$00
+
+; Padding: everything from LBE95 to the end of the ROM is pinned at its
+; original address (the page-$BF constant pool is addressed via #LO(...)
+; immediates with an implied high byte of $BF, the LBF00/LBEFE compare
+; tables likewise, and BRA &BEEB at $BF0D needs LBEEB in range). SKIPTO
+; absorbs any net byte change automatically and errors on overrun.
+        SKIPTO  &BE95
 
 .LBE95
         JSR     LBE25
@@ -12137,6 +12216,11 @@ OSCLI   = $FFF7
         JSR     OSFIND
 
         BRA     LBEEB
+
+; LBEFD must sit at its original address (page-$BF constant pool and
+; LBF00/LBEFE table bases are addressed by fixed low bytes; see
+; OPTIMISATIONS.md). SKIPTO asserts the group above is unchanged.
+        SKIPTO  &BEFD
 
 .LBEFD
         JSR     LBA6E

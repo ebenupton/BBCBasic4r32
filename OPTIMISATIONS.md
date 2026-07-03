@@ -13,8 +13,11 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 14 changes to the ROM, targeting the 65C02. They
-fall into four categories:
+This memo describes 19 changes to the ROM, targeting the 65C02. They
+fall into seven categories (byte-saving, space-skip restructuring, the
+bare-NEXT fast path, the NEXT continuation optimisation, second-round
+byte savings, a bug fix plus error-message compression, and a
+single-digit literal fast path):
 
 **Byte-saving changes** (freeing 18 bytes): These exploit 65C02
 instructions (PHY/PLY, BRA), dead code removal, a register substitution,
@@ -42,7 +45,26 @@ L0A), sets L0A and Y inline, and enters the interpreter dispatch loop
 at L90D2 directly, saving 3 cycles per NEXT iteration by avoiding
 redundant loads.
 
-Net effect: the ROM uses all 16384 bytes exactly. Assignment parsing
+**Second-round byte savings** (Changes 15–16, freeing 4 more bytes):
+a second dead-code removal (an unreachable LDA L31 after an RTS), and
+removal of a redundant CPY #$00 in the string-store path, enabled by
+reordering the two loads in LBE6B so the routine returns with Z/N
+reflecting Y instead of A. The freed bytes are banked as explicit
+padding immediately before LBEFD, pinning the page-$BF floating-point
+constant pool (which is addressed via #LO(...) immediates with an
+implied high byte of $BF, and whose in-page layout the LN/ATN
+table-index code is sensitive to) at its original address.
+
+**Bug fix and error-message compression** (Changes 17–18): Change 17
+fixes a latent detokeniser bug exposed by the earlier byte-count
+changes (a hard-coded keyword-table address in LBD77). Change 18
+compresses the BRK error-message texts with an 11-entry substring
+dictionary and a 38-byte expander hooked into REPORT's print loop,
+recovering ~51 bytes net.
+
+Net effect: the ROM uses all 16384 bytes exactly, of which 51 bytes
+are now free space (absorbed by a SKIPTO directive) available for
+future changes. Assignment parsing
 benefits from faster space-skipping. Tight FOR/NEXT loops with bare
 `NEXT` (followed by `:` or end-of-line) save approximately 49 cycles
 per iteration.
@@ -540,6 +562,219 @@ iteration.
 
 ---
 
+## Change 15: Remove dead LDA L31 after L82FB
+
+**Location:** Line 703 (between the RTS at L8301 and label L8304)
+
+**Rationale:** The instruction `LDA L31` at $8302 immediately follows
+an RTS and has no label — nothing branches to it and nothing falls
+into it. It is unreachable dead code, the same class as Change 5.
+(Verified: no reference to $8302/$8303 exists anywhere in the source,
+either as a label or an address constant.)
+
+**Saves:** 2 bytes.
+
+```diff
+         STA     L31
+         RTS
+
+-        LDA     L31
+ .L8304
+         BMI     L8346
+```
+
+---
+
+## Change 16: LBE6B load reorder + redundant CPY removal at L91EF
+
+**Location:** Lines 12036–12040 (label LBE6B) and 3322–3326 (label L91EF)
+
+**Rationale:** LBE6B appends a carriage return to the string buffer at
+$0600 and is called from the string-store path (L91EF), the OPENIN/
+OPENOUT filename path (LAB41), and by fall-through from LBE65 (the
+OSCLI statement handler). It originally ended with flags reflecting
+A (=$0D), so the L91EF caller needed an explicit `CPY #$00` to test
+the string length in Y. Swapping the two loads (`LDA #$0D / LDY L36`
+instead of `LDY L36 / LDA #$0D`) makes the routine return with Z/N
+reflecting Y (the string length) at no cost, so the caller's CPY can
+be deleted.
+
+Safety: the other JSR caller (line 8364) executes `LDX #$00`
+immediately after return, overwriting Z/N before use; the LBE65
+fall-through path returns into `JMP L9C55`, and L9C55 begins with TXA,
+which also overwrites Z/N. The carry flag is untouched by both the old
+and new orderings. Exhaustively checked: LBE65 and LBE6B are the only
+entry points, and no code branches into the routine's interior.
+
+**Saves:** 2 bytes, 2 cycles per string store through L91EF (every
+string variable assignment).
+
+```diff
+ .LBE6B
+-        LDY     L36
+         LDA     #$0D
++        LDY     L36
+         STA     L0600,Y
+         RTS
+```
+
+```diff
+ .L91EF
+         JSR     LBE6B
+
+-        CPY     #$00
+         BEQ     L9201
+```
+
+---
+
+## Change 17: LBD77 — fix hard-coded keyword-table base (bug fix)
+
+**Location:** Lines 11841/11843 (label LBD77)
+
+**Rationale:** LBD77, the character/token printer used by LIST and by
+the error-message printer, loaded the keyword-table base as hard-coded
+immediates (`LDA #$13 / LDA #$85` = $8513). The `run.sh` sed pass that
+converted address constants to labels only matched 4-hex-digit
+constants, so these two immediates were missed when the disassembly
+was made relocatable. Once Changes 1–5 shifted the table down 3 bytes
+(and Change 15 two more), the token search began mid-table. The walk
+resynchronises after the first entry, so the visible symptoms were
+narrow but real: token $80 (`AND`) became unfindable — `LIST` printed
+garbage for it (`Pp` on the pre-fix ROM) — and on the 3-byte-shifted
+layout `ABS` printed as an empty string. Verified against the pre-fix
+binary in the emulator, and fixed by making the base symbolic:
+
+```diff
+-        LDA     #$13
++        LDA     #LO(L8513)
+         STA     L38
+-        LDA     #$85
++        LDA     #HI(L8513)
+         STA     L39
+```
+
+**Costs/saves:** 0 bytes. Restores correct LIST output and
+token-bearing error messages on any layout.
+
+---
+
+## Change 18: Error-message dictionary compression
+
+**Location:** All 50 relocatable BRK messages; expander + dictionary
+inserted before LBE95; hook in the REPORT print loop (line ~4658).
+
+**Rationale:** The 51 BRK error messages hold ~415 bytes of text.
+Acorn already compresses them by embedding keyword tokens (printed via
+LBD77's table search) and even added a detokenise-only pseudo-keyword
+"Missing " (token $8D) after the tokeniser's $FE end marker — but all
+128 token codes $80–$FF are in use, so that mechanism is exhausted.
+Bytes $0E–$1F never occur in message text, so they become escape
+codes: byte $nn expands to entry ($nn-$0D) of a new dictionary at
+LDICT. Codes $01–$0D deliberately pass through as ordinary control
+characters — the ROM's copyright string, which the language init
+installs as the boot-time "error" and REPORT prints after a clean
+start, legitimately ends with $0A,$0D. (An earlier draft used $01–$1F
+and made REPORT print the copyright followed by a stray dictionary
+entry.)
+The expander LMSGX replaces `JSR LBD77` in REPORT's print loop only
+(LIST and program detokenising are untouched) and recurses, so entries
+may themselves contain escape codes or keyword tokens. A greedy
+optimiser over the real message bytes chose 11 entries:
+
+| code | expansion | | code | expansion |
+|------|-----------|-|------|-----------|
+| $0E | ` range` | | $14 | `variable` |
+| $0F | `No ` | | $15 | `Out of` |
+| $10 | `Too many ` | | $16 | `match` |
+| $11 | ` space` | | $17 | `yntax` |
+| $12 | `<$0F>such ` | | $18 | `ro` |
+| $13 | `Bad ` | | | |
+
+The "No TUBE" message is excluded: it is copied to $0100 by a
+fixed-length loop (`LDX #$0A`) in the service handler, so its size is
+load-bearing. Message text shrinks 407→252 bytes; the dictionary costs
+71 and the expander 44 (including the control-character passthrough). The compression was verified three ways: a
+byte-exact re-expansion check in the build script, an emulator error
+battery covering every dictionary entry (Log range, No FOR, -ve root,
+DIM space, No such variable, Bad DIM, Out of DATA, Type mismatch,
+Syntax error, ON syntax, Too many FORs, Missing ,), and the full
+52-check self-test suite.
+
+**Saves:** 40 bytes net. Costs ~30 cycles per expanded substring on
+the error-print path only (cold).
+
+---
+
+## Change 19: Single-digit decimal-literal fast path
+
+**Location:** Factor evaluator dispatch (label LAD9C) and new code
+LNUMF/LNUMI/LNUMS inserted before LADB6.
+
+**Rationale:** Every numeric literal is parsed by the full
+float-capable decimal parser LA2DD — even a bare `1` costs roughly
+115–120 cycles (seven STZs of setup, the digit loop, the
+integer-assembly exit). Constants of a single digit dominate hot
+interpreted code (`I%=I%+1`, `STEP 1`, comparisons with 0, small
+offsets), and BBC BASIC re-parses them on every execution because
+program text is not constant-folded.
+
+The dispatch at LAD9C routes characters $2E–$3E to the literal parser.
+The fast path first confirms the character is an actual digit
+('0'–'9'), then peeks the next character: if it is a digit, '.', or
+'E' (exactly the continuation set accepted by LA2DD's loop at
+LA303/LA34C — lowercase 'e' is not an exponent marker), it restores
+the entry state (DEY, TXA) and falls into the original `JSR LA2DD`.
+Otherwise it delivers the result directly, reproducing LA2DD's integer
+exit contract at LA36B precisely: L2A = digit value, L2B–L2D = 0,
+A = 1 (integer type), carry set. L1B needs no adjustment — the factor
+evaluator's space-skip already left it pointing at the terminator,
+which is exactly where LA2DD's `STY L1B` would put it. X and Y are not
+normalised: LA2DD's own integer, float, and error exits (and the
+variable-fetch path LB1DE) already leave X/Y with different values per
+path, so no caller can be relying on them.
+
+**Costs:** 43 bytes (from the SKIPTO pool). **Saves:** ~72 cycles per
+single-digit literal (measured); costs ~40 cycles per multi-digit,
+decimal-point, or exponent literal on the peek-and-fall-back path.
+Measured on 5000-iteration loops (centiseconds, Master 128 timing):
+`A%=A%+1` 355→337 (−5%); `A%=A%+12345` 468→478 (+2%);
+`REPEAT S%=S%+1 UNTIL S%=5000` 670→661 (its `+1` wins outweigh the
+multi-digit `5000` penalty). Verified with 23 dedicated literal edge
+cases (multi-digit, `1.5`, `.5`, `5.`, `1E2`, `2E-1`, `VAL`, `DATA`,
+hex, negatives, terminators) plus the full 52-check suite.
+
+---
+
+## Free-space pool and the pinned tail (SKIPTO scheme)
+
+The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
+directive placed after the dictionary; a second `SKIPTO &BEFD` acts as
+a build-time assertion. Everything from LBE95 to the end of the ROM is
+pinned at its original address, because:
+
+- the floating-point constants in page $BF are addressed by
+  single-byte immediates (`LDA #LO(LBFxx)` / `ADC #LO(LBFxx)`) with the
+  high byte implied to be $BF by the consuming routines;
+- the LAA55 range-check indexes its compare tables via the LBF00/LBEFE
+  bases;
+- the LN/ATN table-index computation (the ADC #$0A chain at LA8CC,
+  home of the documented LN accuracy bug) is sensitive to where table
+  entries sit *within* the page — letting the pool drift would
+  silently change which entries suffer the wrap-around, altering
+  LN/ATN results;
+- the pinned code at $BF0D ends with `BRA LBEEB`, so LBEEB must stay
+  within branch range (this is why the boundary is LBE95, the first
+  flow boundary before that group, rather than LBEFD).
+
+SKIPTO makes the assembler absorb any net byte change automatically
+and fail the build on overrun. **The pool currently holds 1 free
+byte** ($BE94) after Change 19 spent 43 of the 44 recovered by
+Changes 15–18: the next feature needs new byte mining first (the
+token-match merge below is the cheapest known option).
+
+---
+
 ## Summary
 
 | # | Location | Label | Bytes | Cycles saved |
@@ -558,9 +793,52 @@ iteration.
 | 12 | 5402, 5447 | L9C80/L9CB8 | -12 | 0 (hot path) |
 | 13 | 10299 | LB522 | +14 | **~46 per bare NEXT** |
 | 14 | 10407 | LB5CF | +4 | **3 per NEXT iteration** |
+| 15 | 703 | (dead code) | -2 | -- |
+| 16 | 12036, 3325 | LBE6B/L91EF | -2 | 2 per string store |
+| 17 | 11841 | LBD77 | 0 | (bug fix: LIST/AND, ABS) |
+| 18 | (50 messages) | LMSGX/LDICT | -40 | ~30/substring, error path only |
+| 19 | 8818 | LAD9C/LNUMF | +43 | **~72 per single-digit literal** |
+| | | (SKIPTO pool before LBE95) | +1 | -- |
 | | | **Total** | **0** | |
 
-With all applicable changes applied (1–5, 11–14), the ROM uses all
-16384 bytes exactly. Assignment parsing benefits from faster
-space-skipping. Tight FOR/NEXT loops with bare `NEXT` (followed by
-end-of-line or `:`) save approximately 49 cycles per iteration.
+With all applicable changes applied (1–5, 11–19), the ROM uses all
+16384 bytes exactly, 1 of which is free space in the SKIPTO pool. Assignment parsing benefits from
+faster space-skipping. Tight FOR/NEXT loops with bare `NEXT` (followed
+by end-of-line or `:`) save approximately 49 cycles per iteration.
+String assignment saves 2 cycles per store. Single-digit constants in
+expressions evaluate ~72 cycles faster: `A%=A%+1` loops run ~5%
+faster overall.
+
+## Rejected / future candidates from the second round
+
+Beyond Changes 15–16, a systematic second pass (peephole scans for
+65C02 idioms, redundant flag/register operations, JMP→BRA range
+checks, branch-trampoline retargeting, duplicate-tail merging, and
+unreferenced-label analysis over the assembled listing) found no
+further clean wins. For the record:
+
+- **JMP→BRA:** the only in-range JMP left is the ROM service-entry
+  vector at $8003, which is format-locked (and saving a byte between
+  the fixed header offsets is useless anyway).
+- **Branch trampolines:** all ~90 conditional branches that land on a
+  JMP have final targets out of BRA range from the branch site.
+- **PLA/TAY→PLY (3 sites):** rejected — every site consumes the pulled
+  value in A immediately afterwards (EOR/SBC/STA), so A must be loaded.
+- **Sign-pack merge** (`LDA L2E/EOR L31/AND #$80/EOR L31` ×3 at lines
+  7175, 10004, 11602): would save ~6 bytes but adds 12 cycles to every
+  real-variable store — a bad trade for a hot path.
+- **Token-match merge** (lines 2315/2334, LIST path): would save ~5
+  bytes at +12 cycles on a cold path; viable if a future change needs
+  more bytes than the padding pool provides, but needs a final
+  flags-liveness check on L8D86 before use.
+- **UNTIL loop-back micro-optimisation:** reusing the Change-14 trick
+  costs +6 bytes for 3 cycles per REPEAT iteration and would need the
+  L0A=1 invariant threaded past the shared LB762 entry; not worth it.
+- **Single-digit decimal-literal fast path:** now implemented as
+  Change 19, funded by the Change 18 compression.
+- **Confirmed already-optimal (no change possible):** the integer
+  variable fetch (LB1DE), integer add/subtract (L9F13/L9F70), operand
+  push (LBC66), resident-integer name fast path (L99D8), the
+  recursive-descent precedence tests (L9E02/L9E48/L9E6D/LA029), the
+  IF-false line-skip scan (L9CFD, 16 cycles/char but no cheaper
+  correct form), and the PROC-call pointer setup (L97A9).
