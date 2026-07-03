@@ -49,25 +49,32 @@ redundant loads.
 a second dead-code removal (an unreachable LDA L31 after an RTS), and
 removal of a redundant CPY #$00 in the string-store path, enabled by
 reordering the two loads in LBE6B so the routine returns with Z/N
-reflecting Y instead of A. The freed bytes are banked as explicit
-padding immediately before LBEFD, pinning the page-$BF floating-point
-constant pool (which is addressed via #LO(...) immediates with an
-implied high byte of $BF, and whose in-page layout the LN/ATN
-table-index code is sensitive to) at its original address.
+reflecting Y instead of A. All freed bytes flow into a SKIPTO pool
+before LBE95, pinning the page-$BF floating-point constant pool (which
+is addressed via #LO(...) immediates with an implied high byte of $BF,
+and whose in-page layout the LN/ATN table-index code is sensitive to)
+at its original address — see "Free-space pool" below.
 
 **Bug fix and error-message compression** (Changes 17–18): Change 17
 fixes a latent detokeniser bug exposed by the earlier byte-count
-changes (a hard-coded keyword-table address in LBD77). Change 18
-compresses the BRK error-message texts with an 11-entry substring
-dictionary and a 38-byte expander hooked into REPORT's print loop,
-recovering ~51 bytes net.
+changes (a hard-coded keyword-table address in LBD77 that broke LIST
+of AND and ABS). Change 18 compresses the BRK error-message texts with
+an 11-entry substring dictionary and a 44-byte expander hooked into
+REPORT's print loop, recovering 40 bytes net.
 
-Net effect: the ROM uses all 16384 bytes exactly, of which 51 bytes
-are now free space (absorbed by a SKIPTO directive) available for
-future changes. Assignment parsing
-benefits from faster space-skipping. Tight FOR/NEXT loops with bare
-`NEXT` (followed by `:` or end-of-line) save approximately 49 cycles
-per iteration.
+**Single-digit decimal-literal fast path** (Change 19, spending 43 of
+those bytes): the factor evaluator delivers a single-digit integer
+constant directly when the next character cannot continue a numeric
+literal, bypassing the full float-capable parser at LA2DD. Saves ~72
+cycles per single-digit constant — `A%=A%+1` loops run ~5% faster —
+at a cost of ~40 cycles on multi-digit, decimal or exponent literals.
+
+Net effect: the ROM uses all 16384 bytes exactly, of which 1 byte
+remains free in the SKIPTO pool. Assignment parsing benefits from
+faster space-skipping. Tight FOR/NEXT loops with bare `NEXT` (followed
+by `:` or end-of-line) save approximately 49 cycles per iteration.
+String assignment saves 2 cycles per store, and single-digit constants
+in expressions evaluate ~72 cycles faster.
 
 All changes target the 65C02 and preserve the original semantics.
 
