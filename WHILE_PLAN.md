@@ -322,8 +322,8 @@ Identified funding beyond the 70 from reverts:
 
 | Source | Frees | Cost |
 |--------|-------|------|
-| Strip Tube/HiBASIC service frills (the *BASIC-style command matcher, 'H' prefix, LBF66 tube check, "No TUBE" stack-copied BRK, OSBYTE $8E re-entry; keep *HELP + workspace calls) | ~100 | ROM no longer enterable by star-command/Tube (still via *FX 142 and reset; decision needed) |
-| Also drop the *HELP responder | ~30 | *HELP shows nothing for BASIC (decision needed) |
+| Strip the service call-4 frills (the *BASIC-style command matcher, 'H' prefix, LBF66 tube check, "No TUBE" stack-copied BRK, OSBYTE $8E re-entry). MUST keep the $02/$27 OSBYTE 187 registration (~12 bytes) so the Master MOS's built-in *BASIC still finds us, and the unclaimed-call pass-on path (protocol requirement). | ~100 | Spec-compliant. On a Master nothing is lost; Tube language transfer still works via the header relocation data. Only a 65C02-modified BBC B would lose *BASIC-by-name (use *FX 142). |
+| Also drop the *HELP responder (service call 9) | ~30 | Spec-compliant but breaches Acorn's "should respond to *HELP" etiquette — the only documented convention violated by either strip. Restore first from any byte surplus. *ROMS still lists the title. |
 | Sign-pack merge (3 identical 8-byte sequences) | ~6 | +12 cycles per real-variable store (acceptable given perf is being traded away) |
 | L9DF3 also uses LCPYW | ~9 | +12 cycles per expression evaluation (measurable; last resort) |
 
