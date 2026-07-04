@@ -12,12 +12,18 @@ formatting, and ON ERROR/ERR. It finishes with four TIME-based
 benchmark loops (bare NEXT, integer increment, STR$ + string store,
 REPEAT/UNTIL) and a `PASS=nn FAIL=nn` summary.
 
-Expected result on both the baseline and optimised ROM: `PASS=52 FAIL=0`,
-with `LN1000=6.90775639`, `LNB=3.07692308E-2`, `ATNB=0.753140099`
-(these are the ROM's documented pre-existing values, not the
-mathematically correct ones). Benchmark expectations (centiseconds,
-Master 128): baseline B1=266 B2=355 B3=706 B4=670; with Change 19
-(single-digit literal fast path) B2≈335 and B4≈653, others unchanged.
+Expected result: `PASS=52 FAIL=0`, with `LN1000=6.90775639`,
+`LNB=3.07692308E-2`, `ATNB=0.753140099` (the ROM's documented
+pre-existing values, not the mathematically correct ones). Benchmark
+expectations (centiseconds, Master 128) for the Change 21 ROM:
+B1=318 B2=368 B3=712 B4=677 (the speed features were reverted to
+fund WHILE/ENDWHILE; see OPTIMISATIONS.md).
+
+`whiletest.bas` (on the disc as `WTEST`, also `*EXEC`-able) is the
+WHILE/ENDWHILE acceptance battery: expect `PASS=15 FAIL=0`. Note that
+WHILE programs must be entered through the ROM's own tokeniser
+(typed, `*EXEC`, or LOAD of a ROM-tokenised file) — host-side
+tokenisers such as jsbeeb's `load_basic` do not know the new tokens.
 
 Error messages are compressed (Change 18): after any change to the
 message dictionary, also run an error battery covering each entry —

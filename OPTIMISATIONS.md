@@ -13,7 +13,10 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 20 changes to the ROM, targeting the 65C02. They
+This memo describes 21 changes to the ROM, targeting the 65C02.
+As of Change 21 the pure speed features (11, 13, 14, 19, part of 20)
+are REVERTED, their bytes spent instead on a BASIC V-style
+WHILE/ENDWHILE extension — see Change 21 and WHILE_PLAN.md. They
 fall into seven categories (byte-saving, space-skip restructuring, the
 bare-NEXT fast path, the NEXT continuation optimisation, second-round
 byte savings, a bug fix plus error-message compression, and a
@@ -348,6 +351,8 @@ register invariant makes it unsuitable here.
 
 ## Change 11: L9C16 — assignment parsing space-skip restructure
 
+**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
+
 **Location:** Lines 5317–5322 (label L9C16), 3 callers
 
 **Rationale:** This space-skip is in the assignment/equality parsing
@@ -438,6 +443,8 @@ L9CB8's two cold call paths (the extra BIT/BMI test).
 ---
 
 ## Change 13: LB522 — bare-NEXT fast path
+
+**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
 
 **Location:** Lines 10299–10310 (label LB522)
 
@@ -535,6 +542,8 @@ To present this more clearly, the complete old and new blocks are:
 ---
 
 ## Change 14: LB5CF — NEXT continuation path optimisation
+
+**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
 
 **Location:** Lines 10407–10414 (label LB5CF)
 
@@ -716,6 +725,8 @@ the error-print path only (cold).
 
 ## Change 19: Single-digit decimal-literal fast path
 
+**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
+
 **Location:** Factor evaluator dispatch (label LAD9C) and new code
 LNUMF/LNUMI/LNUMS inserted before LADB6.
 
@@ -758,6 +769,10 @@ hex, negatives, terminators) plus the full 52-check suite.
 ---
 
 ## Change 20: LA2DD entry restructure — near-free literal fall-back
+
+**Status: PARTIALLY REVERTED by Change 21** — the LA2DD entry
+restructure went with Change 19; the LMSGX loop rotation and the
+LCPYW extraction remain (LCPYW gained the L9DF3 call site).
 
 **Location:** LA2DD entry (label LNUMD added), LNUMF's fall-back
 (LNUMS/LNUMX), LMSGX skip/print loops, and a new shared pointer-copy
@@ -830,71 +845,128 @@ bytes** ($BE92–$BE94).
 
 ---
 
+## Change 21: WHILE/ENDWHILE — a BASIC V-style loop for BASIC IV
+
+The performance features (Changes 11, 13, 14, 19 and the Change 20
+LA2DD restructure) were reverted and the freed bytes — plus a strip of
+the service-call frills and two cold-path merges — spent on a real
+language extension: `WHILE <expr> ... ENDWHILE` with BASIC V
+semantics. Design and rationale in `WHILE_PLAN.md`; the BASIC V
+reference implementation studied is RISC OS Open's `s/Stmt`
+(WHILE/EWHILE/ENDWH).
+
+**Tokens.** All 128 single-byte token codes are in use, so
+WHILE/ENDWHILE are two-byte escape-statement tokens using OFF ($87)
+as the prefix — the analogue of BASIC V's TESCSTMT. OFF is consumed
+only at argument-position lookaheads (after TRACE / ON ERROR / ON),
+is an error at statement position, and is never legally followed by a
+top-bit byte, so the pairs
+
+    WHILE    = $87 $E3   ("OFF FOR")
+    ENDWHILE = $87 $DC   ("OFF DATA")
+
+cannot occur in any pre-existing program, nor inside strings, REM,
+DATA or $8D line-number triples. The second bytes were chosen so
+LBD77's first-match detokenisation still resolves $E3/$DC to FOR/DATA.
+Integration: keyword-table entries (ENDWHILE placed between ENDPROC
+and END so `END.` still abbreviates ENDPROC; WHILE before the
+WIDTH/$FE tokeniser terminator, which moves the `W.` abbreviation
+from WIDTH to WHILE — use `WI.` for WIDTH); a 12-byte emitter hook at
+L8F5D triggered by keyword-flag bit 7 (the only untested bit in the
+matcher, per the audit) that prefixes $87 — the input buffer is a
+single page, so no high-byte carry is needed; a statement-dispatch
+hook at L90EA; and a LIST hook that prints the pairs from the
+ENDWHILE entry text, exploiting the fact that "ENDWHILE" contains
+"WHILE" as its suffix (offset 3, terminated by the entry's top-bit
+token byte). Abbreviations (`W.`, `ENDW.`) work through the normal
+matcher, and `TRACE OFF`/`ON ERROR OFF` still LIST correctly via the
+genuine-OFF fallback.
+
+**Runtime.** WHILE piggybacks on the REPEAT infrastructure: REPEAT's
+push (depth check, `Too many REPEATs`, L9C80 normalise, store, INC
+L24) was refactored into the shared subroutine LPUSH, and UNTIL's
+condition evaluation (L9DF3/L9C55/L9781 plus the 4-byte zero test)
+into LEVAL — so WHILE loops share the REPEAT stack, its depth limit
+of 20, its overflow error and its reset discipline, and get the
+Escape check for free via L9C55. WHILE pushes the condition pointer
+(the current position — the same thing REPEAT pushes) and evaluates:
+TRUE continues, FALSE pops and scans forward. ENDWHILE re-evaluates
+the saved condition in place (BASIC V's trick — the WHILE statement
+executes once per loop entry and the scan runs at most once per
+loop): TRUE continues at the block start, which is where the text
+pointer already is; FALSE pops and resumes after the ENDWHILE. The
+forward scanner is a guard-free byte-pair scan with a nesting
+counter, per-line Escape checks (via the L9C80 fold), end-of-program
+detection ($0D then a top-bit byte → `No ENDWHILE`, error 46), and an
+explicit case for a $87 (TRACE OFF) as the last byte of a line.
+Mixing constructs on the shared stack is exactly as forgiving as
+BASIC IV's other stacks (see WHILE_PLAN.md §3.3 for the verified
+comparison); a stray ENDWHILE reports `No REPEAT`.
+
+**Funding.** Freed: the four perf reverts + pool (70), the service
+call-4/*HELP strip (~142 — the $02/$27 OSBYTE $BB registration and
+the unclaimed-call pass-on are kept, so the Master's built-in *BASIC
+still works and the ROM remains service-protocol compliant), the
+sign-pack merge (LSGNP, 3 float-store sites, +12 cycles per real
+store), the L9DF3 pointer copy via LCPYW (+12 cycles per expression),
+and an IF-handler share of LEVAL's zero-test tail (LEVAL4, +12 cycles
+per IF). Spent: ~250 bytes of feature. The SKIPTO pool holds 1 byte;
+the pinned tail is unchanged.
+
+**Verified** (jsbeeb, Master 128): 15-case WHILE acceptance battery
+(basic/nested/false-entry loops, multi-line skip over strings and
+REMs, FOR and REPEAT inside WHILE, WHILEX variable, `WHILE(`,
+PROC calls in the body, `No REPEAT`/`Too many REPEATs`/`No ENDWHILE`
+errors, IF...THEN WHILE nesting in the scan, TRACE OFF at end of
+line inside a skipped region) — 15/0; LIST round-trip including
+TRACE OFF; W./ENDW. abbreviations; immediate-mode single-line WHILE;
+and the full 52-check regression suite — 52/0 with FP output
+unchanged. `tests/whiletest.bas` (also on the disc as WTEST) holds
+the battery.
+
+---
+
 ## Summary
 
-| # | Location | Label | Bytes | Cycles saved |
-|---|----------|-------|-------|-------------|
-| 1 | 173, 220 | L802C/L806A | -2 | 4 per service call |
-| 2 | 6694 | LA2CC | -2 | 7 per digit output |
-| 3 | 193 | L8040+9 | -1 | -- |
-| 4 | 9387 | LB047 | -1 | -- |
-| 5 | 6707 | (dead code) | -1 | -- |
-| 6 | 2852 | L8F92 | *(not applied)* | *(Y register conflict — 4 live callers)* |
-| 7 | 2862 | L8F9D | *(not applied)* | *(Y register conflict — 8 live callers)* |
-| 8 | 3110 | L90D0/L90D2 | *(not applied)* | *(Y register conflict)* |
-| 9 | 6207 | LA06F/LA070 | *(not applied)* | *(X register contract change)* |
-| 10 | 8822 | LAD78 | *(not applied)* | *(Y register conflict)* |
-| 11 | 5317 | L9C16 | +1 | 6 per space (x3 callers) |
-| 12 | 5402, 5447 | L9C80/L9CB8 | -12 | 0 (hot path) |
-| 13 | 10299 | LB522 | +14 | **~46 per bare NEXT** |
-| 14 | 10407 | LB5CF | +4 | **3 per NEXT iteration** |
-| 15 | 703 | (dead code) | -2 | -- |
-| 16 | 12036, 3325 | LBE6B/L91EF | -2 | 2 per string store |
-| 17 | 11841 | LBD77 | 0 | (bug fix: LIST/AND, ABS) |
-| 18 | (50 messages) | LMSGX/LDICT | -40 | ~30/substring, error path only |
-| 19 | 8818 | LAD9C/LNUMF | +43 | **~72 per single-digit literal** |
-| 20 | 6679, 8848 | LA2DD/LNUMD/LCPYW | -2 | fall-back ~32→~8 cycles |
-| | | (SKIPTO pool before LBE95) | +3 | -- |
-| | | **Total** | **0** | |
+| # | Label | Bytes | Notes |
+|---|-------|-------|-------|
+| 1 | L802C/L806A | -2 | 4 cycles per service call |
+| 2 | LA2CC | -2 | 7 per digit output |
+| 3 | L8040+9 | -1 | |
+| 4 | LB047 | -1 | |
+| 5 | (dead code) | -1 | |
+| 6–10 | (space-skips) | not applied | Y/X register conflicts |
+| 11 | L9C16 | reverted | was +1, 6 cycles/space |
+| 12 | L9C80/L9CB8 | -12 | |
+| 13 | LB522 | reverted | was +14, ~46/bare NEXT |
+| 14 | LB5CF | reverted | was +4, 3/NEXT |
+| 15 | (dead code) | -2 | |
+| 16 | LBE6B/L91EF | -2 | 2 per string store |
+| 17 | LBD77 | 0 | bug fix: LIST of AND/ABS |
+| 18 | LMSGX/LDICT | -40 | error-message compression |
+| 19 | LNUMF | reverted | was +43, ~72/single-digit literal |
+| 20 | LMSGX rot., LCPYW | -7 | LA2DD part reverted |
+| 21 | WHILE/ENDWHILE | net 0 | feature, funded as described |
+| | (SKIPTO pool) | +1 | |
 
-With all applicable changes applied (1–5, 11–20), the ROM uses all
-16384 bytes exactly, 3 of which are free space in the SKIPTO pool. Assignment parsing benefits from
-faster space-skipping. Tight FOR/NEXT loops with bare `NEXT` (followed
-by end-of-line or `:`) save approximately 49 cycles per iteration.
-String assignment saves 2 cycles per store. Single-digit constants in
-expressions evaluate ~72 cycles faster: `A%=A%+1` loops run ~5%
-faster overall.
+The ROM uses all 16384 bytes exactly, 1 of which is free in the
+SKIPTO pool. The interpreter now runs at close to original 4r32 speed
+(slightly slower: +12 cycles on each of IF, expression evaluation
+entry, real-variable store, and UNTIL, from the funding merges), and
+gains WHILE/ENDWHILE. Benchmarks (centiseconds, Master 128, suite
+loops): B1=318 B2=368 B3=712 B4=677.
 
-## Rejected / future candidates from the second round
+## Rejected / future candidates
 
-Beyond Changes 15–16, a systematic second pass (peephole scans for
-65C02 idioms, redundant flag/register operations, JMP→BRA range
-checks, branch-trampoline retargeting, duplicate-tail merging, and
-unreferenced-label analysis over the assembled listing) found no
-further clean wins. For the record:
-
-- **JMP→BRA:** the only in-range JMP left is the ROM service-entry
-  vector at $8003, which is format-locked (and saving a byte between
-  the fixed header offsets is useless anyway).
-- **Branch trampolines:** all ~90 conditional branches that land on a
-  JMP have final targets out of BRA range from the branch site.
-- **PLA/TAY→PLY (3 sites):** rejected — every site consumes the pulled
-  value in A immediately afterwards (EOR/SBC/STA), so A must be loaded.
-- **Sign-pack merge** (`LDA L2E/EOR L31/AND #$80/EOR L31` ×3 at lines
-  7175, 10004, 11602): would save ~6 bytes but adds 12 cycles to every
-  real-variable store — a bad trade for a hot path.
-- **Token-match merge** (LIST path): REJECTED on closer inspection —
-  the candidate block contains a `BNE L8CE3` non-local branch, so a
-  JSR extraction would leave a stale return address on the stack;
-  restructured variants yield at most +1 byte.
-- **UNTIL loop-back micro-optimisation:** reusing the Change-14 trick
-  costs +6 bytes for 3 cycles per REPEAT iteration and would need the
-  L0A=1 invariant threaded past the shared LB762 entry; not worth it.
-- **Single-digit decimal-literal fast path:** now implemented as
-  Change 19, funded by the Change 18 compression.
-- **Confirmed already-optimal (no change possible):** the integer
-  variable fetch (LB1DE), integer add/subtract (L9F13/L9F70), operand
-  push (LBC66), resident-integer name fast path (L99D8), the
-  recursive-descent precedence tests (L9E02/L9E48/L9E6D/LA029), the
-  IF-false line-skip scan (L9CFD, 16 cycles/char but no cheaper
-  correct form), and the PROC-call pointer setup (L97A9).
+- **JMP→BRA, trampolines, PLA/TAY→PLY:** all rejected in the second
+  round (see git history for details); the only in-range JMP left is
+  the format-locked ROM header vector.
+- **Token-match merge (LIST path):** rejected — the candidate block
+  contains a non-local `BNE L8CE3`, so a JSR extraction would leave a
+  stale return address on the stack.
+- **Space-skip restructures (Changes 6–10):** correctly rejected —
+  caller Y/X exit conventions are load-bearing.
+- **Restoring the performance features:** Changes 11/13/14/19/20a are
+  cleanly revertable from git history if WHILE/ENDWHILE is ever
+  dropped, or fundable by the companion-bank design sketched in the
+  space discussion (docs in git history) if both are wanted at once.

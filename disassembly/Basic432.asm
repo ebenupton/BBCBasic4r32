@@ -167,16 +167,17 @@ OSCLI   = $FFF7
 .L8028
         EQUW    $C000,$0082
 
+; Service handler (slimmed for Change 21): only the reset/workspace
+; calls ($02, $27) are claimed, registering this bank as the BASIC
+; ROM via OSBYTE $BB so the Master MOS's built-in *BASIC finds us.
+; The *HELP responder and the *BASIC/*HBASIC command matcher with its
+; Tube entry machinery were removed to fund WHILE/ENDWHILE - see
+; OPTIMISATIONS.md (spec-compliant: unclaimed calls pass on with A
+; preserved, as required).
 .L802C
         PHA
         TAX
         PHY
-        CPX     #$09
-        BEQ     L804C
-
-        CPX     #$04
-        BEQ     L8070
-
         CPX     #$02
         BEQ     L8040
 
@@ -191,115 +192,10 @@ OSCLI   = $FFF7
 
         BRA     L806A
 
-.L804C
-        LDA     (LF2),Y
-        CMP     #$0D
-        BNE     L806A
-
-        JSR     OSNEWL
-
-        LDX     #$F6
-.L8057
-        LDA     L7F13,X
-        BNE     L805E
-
-        LDA     #$20
-.L805E
-        JSR     OSASCI
-
-        INX
-        BNE     L8057
-
-        JSR     OSNEWL
-
-.L8067
-        JSR     L80D8
-
 .L806A
         PLY
         LDX     LF4
         PLA
-        RTS
-
-.L8070
-        LDA     (LF2),Y
-        AND     #$DF
-        CMP     #$48
-        BNE     L808F
-
-        INY
-        LDA     #$40
-        TSB     LF4
-        LDA     (LF2),Y
-        INY
-        CMP     #$2E
-        BEQ     L80A8
-
-        AND     #$DF
-        CMP     #$49
-        BEQ     L808F
-
-        JSR     L80D8
-
-        DEY
-        DEY
-.L808F
-        LDX     #$FB
-.L8091
-        LDA     (LF2),Y
-        CMP     #$2E
-        BEQ     L80A8
-
-        AND     #$DF
-        CMP     L7F0E,X
-        BNE     L8067
-
-        INY
-        INX
-        BNE     L8091
-
-        LDA     (LF2),Y
-        CMP     #$21
-        BCS     L8067
-
-.L80A8
-        BIT     LF4
-        BVC     L80CC
-
-        JSR     LBF66
-
-        BNE     L80CC
-
-        JSR     L80D8
-
-        LDX     #$0A
-.L80B6
-        LDA     L80C2,X
-        STA     L0100,X
-        DEX
-        BPL     L80B6
-
-        JMP     L0100
-
-.L80C2
-        BRK
-        EQUB    $00
-
-        EQUS    "No TUBE"
-
-        EQUB    $00
-
-.L80CC
-        LDA     LF4
-        EOR     #$40
-        TAX
-        LDA     #$8E
-        LDY     #$00
-        JMP     OSBYTE
-
-.L80D8
-        LDA     #$40
-        TRB     LF4
         RTS
 
 .L80DD
@@ -1191,6 +1087,18 @@ OSCLI   = $FFF7
 
         EQUB    $E1,$01
 
+; WHILE/ENDWHILE (Change 21) are two-byte escape-statement tokens:
+; $87 (OFF) prefix + the entry token byte below, emitted by the hook
+; at L8F5D when flag bit 7 is set. Entry token bytes $DC/$E3 were
+; chosen so LBD77's first-match detokenisation still resolves them to
+; DATA/FOR (which precede these entries alphabetically). LWTXTE also
+; serves LIST: "ENDWHILE" contains "WHILE" as its suffix (offset 3),
+; terminated by the top-bit token byte.
+.LWTXTE
+        EQUS    "ENDWHILE"
+
+        EQUB    $DC,$81
+
         EQUS    "END"
 
         EQUB    $E0,$01
@@ -1562,6 +1470,10 @@ OSCLI   = $FFF7
         EQUS    "VPOS"
 
         EQUB    $BC,$01
+
+        EQUS    "WHILE"
+
+        EQUB    $E3,$83
 
         EQUS    "WIDTH"
 
@@ -2798,6 +2710,16 @@ OSCLI   = $FFF7
         ADC     #$40
 .L8F5D
         DEY
+        BIT     L3D
+        BPL     LWEM1
+
+        PHA
+        LDA     #$87
+        STA     (L37)
+        INC     L37
+        PLA
+        DEY
+.LWEM1
         JSR     L8DA8
 
         LDX     #$FF
@@ -3122,6 +3044,12 @@ OSCLI   = $FFF7
         BCS     L90DE
 
 .L90EA
+        CMP     #$87
+        BNE     L90EE
+
+        JMP     LWTOK
+
+.L90EE
         LDX     L0B
         STX     L19
         LDX     L0C
@@ -3189,7 +3117,7 @@ OSCLI   = $FFF7
 
         JSR     LB365
 
-        BRA     L90CA
+        JMP     L90CA
 
 .L9146
         JMP     L9C2D
@@ -5453,10 +5381,8 @@ OSCLI   = $FFF7
 .L9CD6
         LDY     L1B
         STY     L0A
-        LDA     L2A
-        ORA     L2B
-        ORA     L2C
-        ORA     L2D
+        JSR     LEVAL4
+
         BEQ     L9CFB
 
         CPX     #$8C
@@ -5684,12 +5610,8 @@ OSCLI   = $FFF7
         RTS
 
 .L9DF3
-        LDA     L0B
-        STA     L19
-        LDA     L0C
-        STA     L1A
-        LDA     L0A
-        STA     L1B
+        JSR     LCPYW
+
 .L9DFF
         JSR     L9E45
 
@@ -7159,10 +7081,8 @@ OSCLI   = $FFF7
         LDA     L30
         STA     (L4A)
         LDY     #$01
-        LDA     L2E
-        EOR     L31
-        AND     #$80
-        EOR     L31
+        JSR     LSGNP
+
         STA     (L4A),Y
         LDA     L32
         INY
@@ -9982,10 +9902,8 @@ OSCLI   = $FFF7
         LDA     L30
         STA     (L37)
         LDY     #$01
-        LDA     L2E
-        EOR     L31
-        AND     #$80
-        EOR     L31
+        JSR     LSGNP
+
         STA     (L37),Y
         INY
         LDA     L32
@@ -10256,12 +10174,19 @@ OSCLI   = $FFF7
         INC     L3C
 .LB516
         CMP     #$F4
-        BNE     LB51C
+        BNE     LB51A
 
         STA     L4C
+.LB51A
+        CMP     #$87
+        BNE     LB51C
+
+        JMP     LWLIST
+
 .LB51C
         JSR     LBD77
 
+.LB51F
         INY
         BRA     LB4E2
 
@@ -11211,6 +11136,7 @@ OSCLI   = $FFF7
 
         JSR     L9781
 
+.LEVAL4
         LDA     L2A
         ORA     L2B
         ORA     L2C
@@ -11585,10 +11511,8 @@ OSCLI   = $FFF7
         LDA     L30
         STA     (L04)
         LDY     #$01
-        LDA     L2E
-        EOR     L31
-        AND     #$80
-        EOR     L31
+        JSR     LSGNP
+
         STA     (L04),Y
         INY
         LDA     L32
@@ -12107,6 +12031,167 @@ OSCLI   = $FFF7
         EQUS    "match",$00
         EQUS    "yntax",$00
         EQUS    "ro",$00
+
+; ---------------------------------------------------------------
+; WHILE/ENDWHILE (Change 21). Statement dispatch lands here on the
+; $87 escape prefix; the second token byte selects the construct.
+; WHILE shares the REPEAT stack (LPUSH) and condition evaluator
+; (LEVAL); see WHILE_PLAN.md and OPTIMISATIONS.md.
+; Fetch the next program byte: Y = its offset on return.
+.LWGET
+        LDY     L0A
+        INC     L0A
+        LDA     (L0B),Y
+        RTS
+
+; Sign-pack helper (merged from three float-store sites).
+.LSGNP
+        LDA     L2E
+        EOR     L31
+        AND     #$80
+        EOR     L31
+        RTS
+
+.LWTOK
+        JSR     LWGET
+
+        CMP     #$E3
+        BEQ     LWHILE
+
+        CMP     #$DC
+        BEQ     LWENDW
+
+        JMP     L9C24
+
+; WHILE: push the condition pointer (current position), evaluate.
+; TRUE: continue. FALSE: pop and scan forward for the matching
+; ENDWHILE, honouring nesting.
+.LWHILE
+        JSR     LPUSH
+
+        JSR     LEVAL
+
+        BNE     LWCONT
+
+        DEC     L24
+        LDX     #$01
+.LWS1
+        JSR     LWGET
+
+        CMP     #$0D
+        BEQ     LWEOL
+
+        CMP     #$87
+        BNE     LWS1
+
+        JSR     LWGET
+
+        CMP     #$0D
+        BEQ     LWEOL
+
+        CMP     #$E3
+        BNE     LWS2
+
+        INX
+        BRA     LWS1
+
+.LWS2
+        CMP     #$DC
+        BNE     LWS1
+
+        DEX
+        BNE     LWS1
+
+        JMP     L90C7
+
+.LWEOL
+        LDY     L0A
+        LDA     (L0B),Y
+        BMI     LWNOE
+
+        INY
+        INY
+        JSR     L9C80
+
+        BRA     LWS1
+
+.LWNOE
+        BRK
+        EQUB    $2E
+
+        EQUS    $0F,"ENDWHILE",$00
+
+; ENDWHILE: re-evaluate the condition saved by the matching WHILE.
+; TRUE: continue at the block start (where the pointer now is).
+; FALSE: pop the entry, resume after the ENDWHILE.
+.LWENDW
+        LDX     L24
+        BEQ     LWNOW
+
+        LDA     L0A
+        PHA
+        LDA     L0B
+        PHA
+        LDA     L0C
+        PHA
+        LDY     L04FF,X
+        LDA     L0513,X
+        STY     L0B
+        STA     L0C
+        LDA     #$01
+        STA     L0A
+        JSR     LEVAL
+
+        BEQ     LWEX
+
+        PLA
+        PLA
+        PLA
+.LWCONT
+        JMP     L90CA
+
+.LWEX
+        DEC     L24
+        PLA
+        STA     L0C
+        PLA
+        STA     L0B
+        PLA
+        STA     L0A
+        JMP     L90C7
+
+.LWNOW
+        JMP     LBA2B
+
+; LIST decoder for the $87 pairs: prints WHILE/ENDWHILE from the
+; ENDWHILE table entry text (WHILE is its suffix at offset 3).
+; Anything else after $87 is a genuine OFF.
+.LWLIST
+        INY
+        LDA     (L0B),Y
+        LDX     #$03
+        CMP     #$E3
+        BEQ     LWLP
+
+        LDX     #$00
+        CMP     #$DC
+        BEQ     LWLP
+
+        DEY
+        LDA     #$87
+        JMP     LB51C
+
+.LWLP
+        LDA     LWTXTE,X
+        BMI     LWLF
+
+        JSR     LBDD4
+
+        INX
+        BRA     LWLP
+
+.LWLF
+        JMP     LB51F
 
 ; Padding: everything from LBE95 to the end of the ROM is pinned at its
 ; original address (the page-$BF constant pool is addressed via #LO(...)

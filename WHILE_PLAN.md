@@ -1,8 +1,11 @@
 # Plan: BASIC V-style WHILE/ENDWHILE for BASIC 4r32 (proposed Change 21)
 
-Status: PLAN ONLY — no code yet. This documents the design, the byte
-accounting, and the open decisions, so the implementation can be a
-mechanical follow-up.
+Status: IMPLEMENTED as Change 21 (see OPTIMISATIONS.md for the
+as-built record; this document is the design study). Deviations from
+the plan: the L9CD6 IF-handler zero-test also shares LEVAL's tail;
+the emitter hook drops the pointer high-byte carry (single-page input
+buffer); `Too many REPEATs` was not retitled; a stray ENDWHILE shares
+`No REPEAT`; the acceptance battery lives in tests/whiletest.bas.
 
 ## 1. Objective and funding strategy
 
