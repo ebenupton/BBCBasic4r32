@@ -172,7 +172,28 @@ entries. What is lost is diagnostic precision on *malformed* programs:
 a stray UNTIL inside a WHILE body will consume the WHILE's entry
 instead of reporting `No REPEAT` (BASIC IV's separate stacks would
 have caught it). Same quirk class as the interpreter's other
-mismatched-construct behaviours; document it.
+mismatched-construct behaviours, all verified in the emulator on the
+current ROM:
+
+- GOTO out of a FOR body leaves the frame live; a later bare NEXT
+  adopts it and resumes the abandoned loop (prints "escaped" three
+  times, then closes with I=4);
+- `NEXT I` over an open inner `FOR J` silently discards J's frame
+  (the "Can't match" error only fires when *no* frame matches);
+- crossed scopes `REPEAT / FOR / UNTIL` run without complaint — UNTIL
+  jumps back over the open FOR, which simply re-executes (and reuses
+  its top frame rather than overflowing);
+- the IF-false scanner honours an $8B byte inside a string literal as
+  ELSE (poking $8B into a quoted string on an IF line yields "Mistake
+  at line 10" from mid-string execution) — the no-quote-guard
+  precedent cited in 3.6.
+
+Note also the *shape* of the new failure mode: a crossed UNTIL that
+pops a WHILE entry jumps to the stored condition text and dispatches
+it as a statement, which in typical programs errors immediately
+(e.g. `X<5` as a statement is a Mistake) — noisier and therefore
+safer than the silent wrong-loop behaviour BASIC IV already exhibits
+for its own stale-frame cases. Document it either way.
 
 Optional hardening (only if budget allows): a parallel one-byte tag
 array (this is where the page-4 hole would come back in) plus ~14
