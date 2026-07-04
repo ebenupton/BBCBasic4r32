@@ -65,29 +65,76 @@ single-byte code.
 
 ## 3. Design for BASIC IV
 
-### 3.1 Keyword recognition: text keywords, no tokens
+### 3.1 Keyword representation — the token question, thought through
 
-`WHILE` and `ENDWHILE` remain plain text in the program. This needs no
-tokeniser or LIST changes at all:
-- the tokeniser will not eat them: "WHILE" diverges from "WIDTH" at
-  the second character; "ENDWHILE" survives because END's conditional
-  flag rejects tokenisation when followed by an alphanumeric
-  (verify both empirically as an early implementation step);
-- LIST shows them as typed (no LISTO indenting — documented limit).
+All 128 single-byte codes are assigned, but that is not the end of the
+analysis. Codes are *context-multiplexed*: statement dispatch,
+expression dispatch and argument-position lookaheads each consume
+overlapping ranges, and several codes are illegal in whole contexts.
+Options examined:
 
-Recognition hook: in the statement dispatch at L90EA, the character is
-already in A before the variable-name parse. Insert `CMP #'W'/BEQ` and
-`CMP #'E'/BEQ` filters that divert to a text comparison against
-"WHILE"/"ENDWHILE" (shared string-compare routine, also used by the
-scanner). Boundary rule: the character after the keyword must not be
-alphanumeric, so `WHILEX=1` still assigns to the variable WHILEX.
+**(a) Reuse a function code for statement-position WHILE.** Every
+function token $8E–$C5 is an error at statement start, so the
+statement loop could give one a second meaning. Fatal flaw: LIST.
+LBD77 detokenises by first-match on the token byte, with no context,
+so one code cannot print as two different keywords. Rejected.
 
-Cost of this placement: ~4–5 cycles on every assignment statement
-(two immediate compares), full compare only for statements starting
-'W'/'E'. Alternative considered and rejected: hooking the "Mistake"
-error path costs nothing on existing programs but misses `WHILE(X>0)`
-(the name parser sees `WHILE(` as an array reference, which errors
-down a different path) and adds ~250 cycles per iteration.
+**(b) Retire a keyword.** No BASIC IV keyword is redundant (OPENIN
+and OPENUP have distinct semantics; the $CF–$D3 statement forms of
+PTR/PAGE/TIME/LOMEM/HIMEM are all live assignment handlers; the
+$C6–$CE commands are legal in programs). Rejected.
+
+**(c) $8D as a two-byte escape prefix.** The line-number marker is
+always followed by three bytes in $40–$7F, so `$8D <token>` is
+unambiguous. But everything that walks $8D triples blindly would need
+patching — RENUMBER's whole-program scan chief among them — plus LIST
+and the tokeniser. Workable but the most invasive option. Rejected in
+favour of (d).
+
+**(d) RECOMMENDED: `OFF` ($87) as a two-byte escape-statement prefix
+— our analogue of BASIC V's TESCSTMT.** Verified in the ROM: $87 is
+consumed at exactly three argument-position lookaheads (after TRACE /
+ON ERROR / ON), has no statement dispatch of its own (statement-start
+OFF is an error today), and is never legally followed by a byte
+≥ $80. Therefore the pairs
+
+    WHILE    = $87 $E3   (OFF FOR)
+    ENDWHILE = $87 $DC   (OFF DATA)
+
+can never occur in an existing program, and — unlike text keywords —
+cannot occur inside strings, REM, DATA or $8D triples either, because
+the tokeniser never emits $87 there. Four integration points:
+
+1. *Tokeniser*: table entries `"WHILE",$E3` (before WIDTH, which must
+   stay last as the $FE scan terminator) and `"ENDWHILE",$DC` (before
+   END, following the ENDPROC-before-END precedent verified in the
+   table). A small emitter hook prefixes the $87 byte when one of
+   these two entries matched — triggered by a spare flag bit if the
+   flag-bit audit finds one, else by comparing the entry pointer
+   (~14–16 bytes either way). Abbreviations (`WH.`, `ENDW.`) work for
+   free via the normal matcher.
+2. *LIST*: a hook in the LIST character loop: on $87 with a following
+   $E3/$DC, print the keyword text from our table entries and consume
+   both bytes (~26 bytes). LBD77 itself needs no change — and the
+   entry token bytes $E3/$DC were chosen so their first-match owners
+   (FOR, DATA — both alphabetically ahead of W/E sections... DATA
+   ahead of ENDWHILE, FOR ahead of WHILE) keep winning LBD77
+   searches, so FOR/DATA/UNTIL/OFF all still LIST correctly.
+3. *Statement dispatch*: in the L90EA path (non-token statements),
+   `CMP #$87` diverts to a second-byte check (~20 bytes). Zero cost
+   for token statements; ~4 cycles for assignments.
+4. *Runtime*: recognition per iteration is a 2-byte compare — no
+   string comparison, no boundary rules, `WHILE(X>0)` just works.
+
+**(e) Fallback: text keywords** (the previous revision of this plan,
+retained in git history): no tokeniser/LIST surgery, but a slower and
+quirkier scanner (statement-start tracking, word-boundary checks,
+WHILEX/WHILE( edge cases) and a per-iteration string compare. Use
+only if the tokeniser hooks in (d) prove unexpectedly hairy.
+
+Known costs of (d) to document: SAVEd programs using WHILE are
+gibberish under stock BASIC (true of any new token scheme); external
+detokenisers print `OFF FOR`/`OFF DATA` until taught the pair.
 
 ### 3.2 Semantics (matching BASIC V where sensible)
 
@@ -149,26 +196,26 @@ line 339, and the ON ERROR reset path off LB2B2).
 ### 3.6 Forward scanner (adapted from BASIC V's EWHILE)
 
 Same skeleton: nesting counter, CR → end-of-program check
-($0D then $FF → `No ENDWHILE`) / skip 3 header bytes / clear flags.
+($0D then $FF → `No ENDWHILE`) / skip 3 header bytes.
 
-Differences forced by text keywords:
-- Match **only at statement starts**: after a line header, after `:`,
-  and after THEN ($8C) or ELSE ($8B) tokens (so
-  `IF X THEN WHILE ...` participates in nesting). Track an
-  at-statement-start state; skip spaces while in it.
-- Boundary check after the matched word (next char not alphanumeric),
-  so a variable named WHILEFLAG never miscounts. Reuse the same
-  compare routine as recognition.
-- String/REM/DATA guards: BASIC V carries a quote toggle and REM/DATA
-  poisoning. Note that BASIC IV's own IF-false scanner (L9CFD) does
-  *neither* (the well-known ELSE-inside-a-string quirk). Decision:
-  implement the quote toggle + REM/DATA poisoning only if the budget
-  allows (~+25 bytes); otherwise match native quirk level and document
-  (`:WHILE` inside a string literal inside a skipped block miscounts).
-  Statement-start matching already makes false positives much rarer
-  than BASIC V's raw byte scan would suffer.
-- No $8D hazard: encoded line numbers after GOTO are three bytes in
-  $40–$7F, which cannot alias keyword text at a statement start.
+With option 3.1(d) the scanner becomes almost exactly BASIC V's,
+minus its guards: it hunts the byte pair `$87 $E3` (+1) / `$87 $DC`
+(−1, match at −1). Because the tokeniser is the only producer of $87
+outside argument position, and strings/REM/DATA/$8D-triples contain
+only what the user typed (never a bare tokenised $87 pair — a `TRACE
+OFF` inside the body scans as $87 followed by a non-pair byte and is
+skipped harmlessly), **no quote toggle, no REM/DATA poisoning, no
+statement-start tracking and no word-boundary checks are needed**.
+Estimated ~40 bytes. One caveat to verify: top-bit bytes can be
+embedded in string/REM text by creative editing; if we choose to
+defend against a literal $87,$E3 inside a string, the BASIC V quote
+toggle costs ~+12 bytes (BASIC IV's own IF/ELSE scanner does not
+bother — the known ELSE-in-a-string quirk — so quirk-parity is
+defensible).
+
+(Under fallback 3.1(e), the scanner needs statement-start tracking
+after line headers / `:` / THEN / ELSE, word-boundary checks, and
+optional guards: ~60–85 bytes — this was the previous revision.)
 
 ### 3.7 Placement
 
@@ -201,16 +248,25 @@ last — but the default per this plan is to revert all of the above.
 Conservative sizing (to be refined to exact instruction counts before
 any code is written — this is the decision gate):
 
-| Component | Bytes |
-|-----------|-------|
-| Keyword texts + shared compare + dispatch hook | ~55 |
-| WHILE handler | ~35 |
-| ENDWHILE handler | ~45 |
-| Shared evaluate-and-test helper | ~12 |
-| Forward scanner (quirk-parity; +25 for BASIC V-grade guards) | ~60–85 |
-| Three error messages (dictionary-assisted) | ~29 |
-| Stack init/reset hooks | ~10 |
-| **Total** | **~245–270** |
+| Component | (d) tokens | (e) text |
+|-----------|-----------|----------|
+| Table entries / keyword texts | 17 | 15 |
+| Tokeniser emitter hook | ~16 | — |
+| LIST detokenise hook | ~26 | — |
+| Recognition/dispatch hook | ~20 | ~40 |
+| WHILE handler | ~35 | ~35 |
+| ENDWHILE handler | ~45 | ~45 |
+| Shared evaluate-and-test helper | ~12 | ~12 |
+| Forward scanner | ~40 (+12 opt. quote guard) | ~60–85 |
+| Three error messages (dictionary-assisted) | ~29 | ~29 |
+| Stack init/reset hooks | ~10 | ~10 |
+| **Total** | **~250** | **~245–290** |
+
+The two options cost about the same; (d) buys correct LIST output,
+working abbreviations, `WHILE(` support, a far simpler and safer
+scanner, and per-iteration recognition measured in single-digit
+cycles instead of a string compare. Byte-wise the budget conclusion
+is unchanged by the choice.
 
 Identified funding beyond the 70 from reverts:
 
@@ -253,22 +309,27 @@ the scanner and error texts in the second bank.
 ## 7. Risks and open questions
 
 1. **Budget** — see §5; hard gate before coding.
-2. Tokeniser behaviour on "ENDWHILE" (END conditional flag) — verify
-   first; if END *does* tokenise mid-word, recognition and scanning
-   must instead match `<END token>"WHILE"`, which also works but
-   complicates the compare.
+2. Tokeniser internals for option (d): audit the keyword-entry flag
+   bits (which of bits 3/4/5/7 the matcher at L8F41–L8F6D really
+   tests) to pick the emitter-hook trigger; verify entry placement
+   rules empirically (ENDWHILE before END, WHILE before the WIDTH/$FE
+   terminator); confirm the emit path has a single choke point for
+   the $87 prefix. If any of this turns hostile, fall back to (e).
 3. The $0480–$04FE hole must be proven free (trace `L046C,X` reach;
    memory-watch under jsbeeb while exercising INPUT/EDIT/AUTO paths).
 4. Statement-dispatch hook adds ~4–5 cycles to every assignment —
    confirm acceptable (it is the price of `WHILE(` correctness).
 5. Service-frill strip changes user-visible behaviour (*commands);
    needs sign-off.
-6. Text keywords are case-sensitive, non-abbreviatable, and invisible
-   to LISTO indenting — document in README.
+6. Option (d): SAVEd WHILE programs are not portable to stock BASIC
+   ROMs, and external detokenisers show `OFF FOR`/`OFF DATA`;
+   LISTO indenting is not extended to WHILE bodies. Document all
+   three in the README.
 
 ## 8. Execution order
 
-1. Verify tokeniser treatment of WHILE/ENDWHILE text (jsbeeb).
+1. Flag-bit audit + tokeniser choke-point check (decides (d) vs (e));
+   verify table placement rules with throwaway entries in jsbeeb.
 2. Verify the page-4 hole.
 3. Do the reverts; re-run suite + benchmarks; commit ("funding" commit).
 4. Exact-size the components on paper against the freed budget
