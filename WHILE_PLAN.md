@@ -145,53 +145,85 @@ detokenisers print `OFF FOR`/`OFF DATA` until taught the pair.
 - Mismatched constructs behave like BASIC IV's other stacks (separate
   stacks, quirky interleavings permitted) rather than BASIC V's tagged
   single stack — consistent with FOR/REPEAT/GOSUB in this ROM.
-- Errors: `No WHILE` (ENDWHILE with empty stack), `Too many WHILEs`
-  (depth exceeded), `No ENDWHILE` (scan hit end of program). All three
-  compress well: the Change 18 dictionary already has `No ` ($0F) and
+- Errors: `Too many loops` (shared with REPEAT — see 3.3), `No WHILE`
+  (ENDWHILE with empty stack; or shared `No REPEAT` in the minimal
+  build), `No ENDWHILE` (scan hit end of program). All compress well:
+  the Change 18 dictionary already has `No ` ($0F) and
   `Too many ` ($10).
 
-### 3.3 WHILE stack
+### 3.3 Loop stack: piggyback on the REPEAT stack
 
-Two parallel byte arrays (lo/hi of a normalised text pointer), REPEAT
-style, depth 10–14, plus one depth byte. Each entry is the pointer to
-the *condition text* (normalised via the L9C80 convention, offset
-folded so L0A=1). Unlike BASIC V we do **not** store the block-start
-pointer: after ENDWHILE re-evaluates the condition TRUE, the text
-pointer is already at the block start, for free.
+WHILE shares the REPEAT stack outright: depth byte L24, pointer
+arrays $0500/$0514 (read back via L04FF/L0513 with 1-based X), the
+depth limit of 20, the overflow error, and — decisively — the
+existing reset discipline (L24 is already cleared at language init,
+RUN/CLEAR and in the error handler, so WHILE needs **no new reset
+hooks and no new RAM**; the page-4 hole survey drops out of the plan
+in the minimal build).
 
-Location: page 4 looks free between $0480 and $04FE — BASIC references
-only $0400–$046B (resident integers), $0460/$0464/$046C–$047F (misc
-state), and the $04FF/$05xx stacks. **Verification required**: confirm
-by tracing the indexed accesses (`L046C,X` at asm lines 3366/10982)
-and by a memory-watch test in jsbeeb; then place the stack at the top
-of that hole (e.g. $04E0–$04FE + pointer byte).
+Why sharing is sound: each entry is a normalised text pointer, and
+both constructs push before their bodies and pop in LIFO order.
+WHILE pushes the pointer to its *condition* (which is the current
+position at push time — the same thing REPEAT pushes, which is what
+makes the code shareable verbatim); ENDWHILE re-evaluates from the
+top entry and pops only when the loop exits. For every well-formed
+program, properly nested REPEAT/WHILE constructs always pop their own
+entries. What is lost is diagnostic precision on *malformed* programs:
+a stray UNTIL inside a WHILE body will consume the WHILE's entry
+instead of reporting `No REPEAT` (BASIC IV's separate stacks would
+have caught it). Same quirk class as the interpreter's other
+mismatched-construct behaviours; document it.
 
-Reset: the depth byte must be zeroed wherever L24/L25/L26 are reset —
-language init, RUN/CLEAR, and the error handler's stack reset. Find
-all such sites as an implementation step (known: the init block near
-line 339, and the ON ERROR reset path off LB2B2).
+Optional hardening (only if budget allows): a parallel one-byte tag
+array (this is where the page-4 hole would come back in) plus ~14
+bytes of checks gives BASIC V-grade `No REPEAT`/`No WHILE` precision
+on mismatches.
 
-### 3.4 WHILE handler
+The shared overflow error message becomes literal: retitle
+`Too many REPEATs` to `Too many loops` (+3 bytes over the current
+dictionary-compressed form, `$10,$F5,"s"` → `$10,"loops"`), covering
+both constructs honestly. Unlike BASIC V we do **not** store the
+block-start pointer: after ENDWHILE re-evaluates the condition TRUE,
+the text pointer is already at the block start, for free.
 
-1. Depth check → `Too many WHILEs`.
-2. Normalise and push the condition pointer.
-3. Evaluate the condition (same helper chain UNTIL uses:
-   JSR L9DF3 / L9C55 / L9781, then the 4-byte ORA zero test —
-   share this as a small subroutine with ENDWHILE).
-4. TRUE: continue (`JMP L90CA`).
-5. FALSE: pop, run the forward scanner, continue after the match.
+### 3.4 Two refactors that make the handlers almost free
 
-### 3.5 ENDWHILE handler
+- **LPUSH**: split REPEAT's body (`LBA88`: depth check → `Too many
+  loops` → JSR L9C80 normalise → store L0B/L0C at $0500/$0514,X →
+  INC L24) into a subroutine ending RTS; REPEAT becomes
+  `JSR LPUSH / JMP L90D0` (+4 bytes to REPEAT, the whole push
+  machinery reusable).
+- **LEVAL**: split UNTIL's front (`JSR L9DF3 / JSR L9C55 / JSR L9781`
+  plus the 4-byte ORA zero test) into a subroutine returning Z=set
+  for false; UNTIL becomes `JSR LEVAL / ...` (+4 bytes to UNTIL).
+  Because L9C55 performs the escape check, every WHILE/ENDWHILE
+  evaluation gets Escape handling for free, like UNTIL.
 
-1. Depth zero → `No WHILE`.
-2. Escape check (`JSR L9C8E`, as Change 14 does).
-3. Save the current text position (resume point) on the CPU stack.
-4. Point L0B/L0C/L0A at the stack-top condition, re-evaluate via the
-   shared helper.
-5. TRUE: discard the saved resume point, continue interpreting at the
-   current position (= block start). Stack entry stays.
-6. FALSE: pop the entry, restore the saved resume point, continue
-   after the ENDWHILE.
+Verify at implementation time: LPUSH's Y register contract (L9C80
+folds Y into the pointer; REPEAT enters with Y = L0A from the
+dispatch loop — the WHILE handler must present the same state).
+
+### 3.5 WHILE and ENDWHILE handlers
+
+WHILE (recognised via the $87 $E3 pair):
+1. `JSR LPUSH` — depth check, shared error, push the condition
+   pointer (= current position; this is why the ordering
+   push-then-evaluate matters).
+2. `JSR LEVAL`.
+3. TRUE: continue (`JMP L90CA`). Entry stays for ENDWHILE.
+4. FALSE: `DEC L24` (pop own entry), run the forward scanner,
+   continue after the match.
+
+ENDWHILE ($87 $DC):
+1. L24 zero → `No WHILE` (or share UNTIL's `No REPEAT` branch in the
+   minimal build — decide at the gate).
+2. Save the current text position (resume point) on the CPU stack.
+3. Load the top entry into L0B/L0C, set L0A=1 (entries are stored
+   normalised), `JSR LEVAL` — escape check included.
+4. TRUE: discard the saved resume point, continue at the current
+   position (= block start, free). Entry stays.
+5. FALSE: `DEC L24`, restore the resume point, continue after the
+   ENDWHILE.
 
 ### 3.6 Forward scanner (adapted from BASIC V's EWHILE)
 
@@ -248,25 +280,22 @@ last — but the default per this plan is to revert all of the above.
 Conservative sizing (to be refined to exact instruction counts before
 any code is written — this is the decision gate):
 
-| Component | (d) tokens | (e) text |
-|-----------|-----------|----------|
-| Table entries / keyword texts | 17 | 15 |
-| Tokeniser emitter hook | ~16 | — |
-| LIST detokenise hook | ~26 | — |
-| Recognition/dispatch hook | ~20 | ~40 |
-| WHILE handler | ~35 | ~35 |
-| ENDWHILE handler | ~45 | ~45 |
-| Shared evaluate-and-test helper | ~12 | ~12 |
-| Forward scanner | ~40 (+12 opt. quote guard) | ~60–85 |
-| Three error messages (dictionary-assisted) | ~29 | ~29 |
-| Stack init/reset hooks | ~10 | ~10 |
-| **Total** | **~250** | **~245–290** |
+With the REPEAT piggyback (3.3/3.4), option (d):
 
-The two options cost about the same; (d) buys correct LIST output,
-working abbreviations, `WHILE(` support, a far simpler and safer
-scanner, and per-iteration recognition measured in single-digit
-cycles instead of a string compare. Byte-wise the budget conclusion
-is unchanged by the choice.
+| Component | Bytes |
+|-----------|-------|
+| Table entries + emitter hook + LIST hook + dispatch hook | ~79 |
+| LPUSH + LEVAL refactors (added to REPEAT/UNTIL) | ~8 |
+| WHILE handler (two JSRs + branches + pop) | ~16 |
+| ENDWHILE handler (dominated by resume-point save/restore) | ~50 |
+| Forward scanner (guard-free byte-pair scan) | ~40 |
+| Errors: `Too many loops` retitle +3, `No ENDWHILE` ~11, `No WHILE` ~8 (or 0 if shared) | ~14–22 |
+| Stack, init and reset hooks | 0 |
+| **Total** | **~210–215** |
+
+(The pre-piggyback standalone design costed ~250 for (d) and
+~245–290 for the text fallback (e); the piggyback saves ~40 bytes
+and deletes the new-RAM requirement and its verification risk.)
 
 Identified funding beyond the 70 from reverts:
 
@@ -277,15 +306,18 @@ Identified funding beyond the 70 from reverts:
 | Sign-pack merge (3 identical 8-byte sequences) | ~6 | +12 cycles per real-variable store (acceptable given perf is being traded away) |
 | L9DF3 also uses LCPYW | ~9 | +12 cycles per expression evaluation (measurable; last resort) |
 
-Best case: 70 + 100 + 30 + 6 + 9 ≈ **215**, versus ~245–270 needed.
-**The plan does not close the gap on paper.** Levers, in preference
-order, at the decision gate: (a) exact sizing usually differs from
-conservative estimates — resolve first; (b) drop the THEN/ELSE
-statement-start cases from the scanner (−10, documented limit);
-(c) shorten `Too many WHILEs`/`No ENDWHILE` texts; (d) reduce depth
-and inline the stack ops; (e) if still short, this becomes the first
-customer of the companion-bank design from the space discussion, with
-the scanner and error texts in the second bank.
+Best case: 70 + 100 + 30 + 6 + 9 ≈ **215**, versus ~210–215 needed:
+**with the REPEAT piggyback the budget now roughly closes on paper**
+— tightly, and only if the service-frill strip (with its behaviour
+change) is accepted. Levers at the decision gate if exact sizing runs
+over: (a) share `No REPEAT` for stray ENDWHILE (−8); (b) keep
+`Too many REPEATs` unretitled (−3); (c) trim the ENDWHILE
+resume-point save by using spare zero-page instead of the CPU stack
+if a truly dead pair exists; (d) if still short, this becomes the
+first customer of the companion-bank design, with the scanner and
+error texts in the second bank. Conversely, if sizing comes in under,
+spend the surplus on the tag-array hardening (3.3), then on
+reinstating Changes 13/14.
 
 ## 6. Test plan
 
@@ -315,8 +347,11 @@ the scanner and error texts in the second bank.
    rules empirically (ENDWHILE before END, WHILE before the WIDTH/$FE
    terminator); confirm the emit path has a single choke point for
    the $87 prefix. If any of this turns hostile, fall back to (e).
-3. The $0480–$04FE hole must be proven free (trace `L046C,X` reach;
-   memory-watch under jsbeeb while exercising INPUT/EDIT/AUTO paths).
+3. Shared-stack semantics: stray UNTIL/ENDWHILE in malformed programs
+   pop each other's entries (see 3.3) — acceptable quirk, document;
+   the optional tag array restores precision and is the only thing
+   that still needs the page-4 hole verified.
+   Also verify LPUSH's Y/L9C80 entry contract from the WHILE hook.
 4. Statement-dispatch hook adds ~4–5 cycles to every assignment —
    confirm acceptable (it is the price of `WHILE(` correctness).
 5. Service-frill strip changes user-visible behaviour (*commands);
@@ -330,8 +365,9 @@ the scanner and error texts in the second bank.
 
 1. Flag-bit audit + tokeniser choke-point check (decides (d) vs (e));
    verify table placement rules with throwaway entries in jsbeeb.
-2. Verify the page-4 hole.
-3. Do the reverts; re-run suite + benchmarks; commit ("funding" commit).
+2. Do the reverts; re-run suite + benchmarks; commit ("funding" commit).
+   Refactor LPUSH/LEVAL in the same commit (behaviour-neutral for
+   REPEAT/UNTIL; re-run suite to prove it).
 4. Exact-size the components on paper against the freed budget
    (**decision gate**; pick funding levers or the two-bank fallback).
 5. Implement recognition + handlers + scanner; error messages last
