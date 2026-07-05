@@ -956,7 +956,12 @@ the battery.
 | | (SKIPTO pool) | +1 | |
 
 The ROM uses all 16384 bytes exactly, 1 of which is free in the
-SKIPTO pool. The interpreter now runs at close to original 4r32 speed
+SKIPTO pool. In the while variant a further 11 bytes are available as
+a fixed-address stash: the Tube-presence check LBF66 ($BF66-$BF70,
+pinned region) is dead there — its only caller went with the service
+strip — but cannot be reclaimed into the pool because nothing in the
+pinned region can shift; future code content of up to 11 bytes could
+be placed over it instead. In the fast variant LBF66 is live. The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and
 gains WHILE/ENDWHILE. Benchmarks (centiseconds, Master 128, suite
