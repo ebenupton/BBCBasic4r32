@@ -70,3 +70,15 @@ This fixed code would now fail for entries near the beginning of a page, but tha
 doesn't happen.
 
 We found it interesting that the same bug affected both LN and ATN, the reason being that both use the same coefficients (but with different signs) and therefore the same tables. ACS and ASN are computed from ATN, so they inherit the bug, and the fix.
+
+## Pre-built ROMs
+
+Two ready-to-use 16K ROM images built from `disassembly/Basic432.asm`
+(see `OPTIMISATIONS.md` for what each contains, and the `Makefile`
+for how they are built and verified):
+
+- `roms/Basic432_fast.rom` — the speed-optimised variant
+- `roms/Basic432_while.rom` — the WHILE/ENDWHILE variant
+
+Both require a 65C02. `tests/README.md` has a recipe for running them
+under jsbeeb's Master 128.

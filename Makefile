@@ -34,6 +34,11 @@ refs: all
 	xxd $(DIS)/Basic432_while.bin > $(DIS)/Basic432_while.hex
 	xxd $(DIS)/Basic432_fast.bin  > $(DIS)/Basic432_fast.hex
 
+# Refresh the committed pre-built ROM images in roms/.
+roms: all
+	cp $(DIS)/Basic432_fast.bin  roms/Basic432_fast.rom
+	cp $(DIS)/Basic432_while.bin roms/Basic432_while.rom
+
 # Rebuild the test disc: both ROMs plus the *EXEC-able test suites.
 disc: all
 	python3 tools/mkssd.py tests/basic432.ssd \
@@ -45,4 +50,4 @@ disc: all
 clean:
 	rm -f $(ROMS)
 
-.PHONY: all check refs disc clean
+.PHONY: all check refs roms disc clean
