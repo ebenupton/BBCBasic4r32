@@ -37,19 +37,28 @@ The ROM needs a 65C02, so use the Master model. `basic432.ssd` (built by
 `tools/mkssd.py`, see below) contains the ROM image as `NEWROM` and the
 self-test as a text file `STEST` that can be `*EXEC`d in.
 
+The disc carries both build variants (see the top-level Makefile:
+`make` builds them from the single conditional source, `make check`
+verifies them against the committed reference images, `make disc`
+rebuilds this disc): `WHILE` is the WHILE/ENDWHILE variant and `FAST`
+is the speed-features variant.
+
 1. Open https://bbc.godbolt.org/?model=Master (or a local jsbeeb with
    the Master model selected).
 2. Load `tests/basic432.ssd` into drive 0 (Discs menu → local file).
-3. Type:
+3. Type (substitute FAST for WHILE to test the other variant):
    ```
-   *SRLOAD NEWROM 8000 4 Q
+   *SRLOAD WHILE 8000 4 Q
    ?&2A5=&40
    *FX 142,4
    ```
    The `BASIC 4r32` banner (title `BASIC`) appears and it is now the current language, so
    error handling (BRK → REPORT) works normally.
 4. `*EXEC STEST` — types the self-test in and runs it. Expect
-   `PASS=52 FAIL=0` and benchmarks near B1=266 B2=337 B3=707 B4=661.
+   `PASS=52 FAIL=0` on both variants; benchmarks (centiseconds):
+   WHILE variant B1=318 B2=368 B3=712 B4=677, FAST variant
+   B1=266 B2=335 B3=707 B4=653. On the WHILE variant, `*EXEC WTEST`
+   runs the WHILE/ENDWHILE battery: expect `PASS=15 FAIL=0`.
 
 Why the poke: MOS 3.20 builds its ROM-type table at &02A1+bank at
 reset, with the empty sideways-RAM banks unplugged, so a freshly
@@ -63,11 +72,7 @@ with the unmodified baseline ROM too (emulator environment issue, not
 a ROM defect; the ROM's own service handler is fine — unit-tested via
 `CALL &802C`). After a BREAK the poke is lost: repeat steps 3.
 
-To rebuild the disc after changing the ROM or the test:
-
-```
-python3 -c "src=open('tests/selftest.bas').read().strip().split('\n'); \
-  open('tests/selftest.txt','wb').write(('\r'.join(src)+'\rRUN\r').encode())"
-tools/mkssd.py tests/basic432.ssd \
-  NEWROM=disassembly/Basic432.bin,8000,8000 STEST=tests/selftest.txt
-```
+To rebuild the disc after changing the ROM or the tests: `make disc`
+(regenerate the .txt files from the .bas sources first if you edited
+those — CR line endings plus a trailing RUN; see the git history of
+this file for the one-liner).

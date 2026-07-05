@@ -14,9 +14,14 @@ later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
 This memo describes 21 changes to the ROM, targeting the 65C02.
-As of Change 21 the pure speed features (11, 13, 14, 19, part of 20)
-are REVERTED, their bytes spent instead on a BASIC V-style
-WHILE/ENDWHILE extension — see Change 21 and WHILE_PLAN.md. They
+The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
+extension (Change 21) are mutually exclusive in the 16K image, so the
+source builds two variants, gated on the WHILE assembly symbol (see
+the Makefile): `Basic432_fast` with the speed features, and
+`Basic432_while` with the extension and the speed features reverted.
+Sections below marked REVERTED are absent from the while variant but
+present in the fast variant; Change 21 is present only in the while
+variant. They
 fall into seven categories (byte-saving, space-skip restructuring, the
 bare-NEXT fast path, the NEXT continuation optimisation, second-round
 byte savings, a bug fix plus error-message compression, and a
@@ -351,7 +356,7 @@ register invariant makes it unsuitable here.
 
 ## Change 11: L9C16 — assignment parsing space-skip restructure
 
-**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
+**Status: fast variant only** — reverted in the while variant to fund Change 21.
 
 **Location:** Lines 5317–5322 (label L9C16), 3 callers
 
@@ -444,7 +449,7 @@ L9CB8's two cold call paths (the extra BIT/BMI test).
 
 ## Change 13: LB522 — bare-NEXT fast path
 
-**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
+**Status: fast variant only** — reverted in the while variant to fund Change 21.
 
 **Location:** Lines 10299–10310 (label LB522)
 
@@ -543,7 +548,7 @@ To present this more clearly, the complete old and new blocks are:
 
 ## Change 14: LB5CF — NEXT continuation path optimisation
 
-**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
+**Status: fast variant only** — reverted in the while variant to fund Change 21.
 
 **Location:** Lines 10407–10414 (label LB5CF)
 
@@ -725,7 +730,7 @@ the error-print path only (cold).
 
 ## Change 19: Single-digit decimal-literal fast path
 
-**Status: REVERTED by Change 21** — the bytes fund WHILE/ENDWHILE.
+**Status: fast variant only** — reverted in the while variant to fund Change 21.
 
 **Location:** Factor evaluator dispatch (label LAD9C) and new code
 LNUMF/LNUMI/LNUMS inserted before LADB6.
@@ -770,9 +775,10 @@ hex, negatives, terminators) plus the full 52-check suite.
 
 ## Change 20: LA2DD entry restructure — near-free literal fall-back
 
-**Status: PARTIALLY REVERTED by Change 21** — the LA2DD entry
-restructure went with Change 19; the LMSGX loop rotation and the
-LCPYW extraction remain (LCPYW gained the L9DF3 call site).
+**Status: partially variant-gated** — the LA2DD entry restructure is
+fast-variant only (it goes with Change 19); the LMSGX loop rotation
+and the LCPYW extraction are in both variants (in the while variant
+LCPYW also gains the L9DF3 call site).
 
 **Location:** LA2DD entry (label LNUMD added), LNUMF's fall-back
 (LNUMS/LNUMX), LMSGX skip/print loops, and a new shared pointer-copy

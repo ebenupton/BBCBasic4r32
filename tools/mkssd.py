@@ -8,10 +8,8 @@ Each argument adds one file. NAME is the DFS name (up to 7 chars,
 optionally prefixed "d." for directory d). load/exec are hex addresses
 and default to 0 (use 8000 for a sideways ROM image).
 
-Example (build the test disc for the 65C02 BASIC ROM):
-    tools/mkssd.py tests/basic432.ssd \
-        NEWROM=disassembly/Basic432.bin,8000,8000 \
-        STEST=tests/selftest.txt
+Example (build the test disc for the 65C02 BASIC ROM variants):
+    make disc      # (see the top-level Makefile, which invokes this)
 """
 import sys
 

@@ -1,4 +1,8 @@
 ; Enable 65C02 opcodes
+; Build with -D WHILE=1 for the WHILE/ENDWHILE variant (Change 21) or
+; -D WHILE=0 for the fast variant (Changes 11/13/14/19/20 speed
+; features, no WHILE) - see the Makefile. The two variants cannot
+; coexist in the 16K image.
 CPU           1
 
 L00     = $0000
@@ -167,6 +171,7 @@ OSCLI   = $FFF7
 .L8028
         EQUW    $C000,$0082
 
+IF WHILE
 ; Service handler (slimmed for Change 21): only the reset/workspace
 ; calls ($02, $27) are claimed, registering this bank as the BASIC
 ; ROM via OSBYTE $BB so the Master MOS's built-in *BASIC finds us.
@@ -174,10 +179,19 @@ OSCLI   = $FFF7
 ; Tube entry machinery were removed to fund WHILE/ENDWHILE - see
 ; OPTIMISATIONS.md (spec-compliant: unclaimed calls pass on with A
 ; preserved, as required).
+ENDIF
 .L802C
         PHA
         TAX
         PHY
+IF WHILE=0
+        CPX     #$09
+        BEQ     L804C
+
+        CPX     #$04
+        BEQ     L8070
+
+ENDIF
         CPX     #$02
         BEQ     L8040
 
@@ -192,10 +206,119 @@ OSCLI   = $FFF7
 
         BRA     L806A
 
+IF WHILE=0
+.L804C
+        LDA     (LF2),Y
+        CMP     #$0D
+        BNE     L806A
+
+        JSR     OSNEWL
+
+        LDX     #$F6
+.L8057
+        LDA     L7F13,X
+        BNE     L805E
+
+        LDA     #$20
+.L805E
+        JSR     OSASCI
+
+        INX
+        BNE     L8057
+
+        JSR     OSNEWL
+
+.L8067
+        JSR     L80D8
+
+ENDIF
 .L806A
         PLY
         LDX     LF4
         PLA
+IF WHILE=0
+        RTS
+
+.L8070
+        LDA     (LF2),Y
+        AND     #$DF
+        CMP     #$48
+        BNE     L808F
+
+        INY
+        LDA     #$40
+        TSB     LF4
+        LDA     (LF2),Y
+        INY
+        CMP     #$2E
+        BEQ     L80A8
+
+        AND     #$DF
+        CMP     #$49
+        BEQ     L808F
+
+        JSR     L80D8
+
+        DEY
+        DEY
+.L808F
+        LDX     #$FB
+.L8091
+        LDA     (LF2),Y
+        CMP     #$2E
+        BEQ     L80A8
+
+        AND     #$DF
+        CMP     L7F0E,X
+        BNE     L8067
+
+        INY
+        INX
+        BNE     L8091
+
+        LDA     (LF2),Y
+        CMP     #$21
+        BCS     L8067
+
+.L80A8
+        BIT     LF4
+        BVC     L80CC
+
+        JSR     LBF66
+
+        BNE     L80CC
+
+        JSR     L80D8
+
+        LDX     #$0A
+.L80B6
+        LDA     L80C2,X
+        STA     L0100,X
+        DEX
+        BPL     L80B6
+
+        JMP     L0100
+
+.L80C2
+        BRK
+        EQUB    $00
+
+        EQUS    "No TUBE"
+
+        EQUB    $00
+
+.L80CC
+        LDA     LF4
+        EOR     #$40
+        TAX
+        LDA     #$8E
+        LDY     #$00
+        JMP     OSBYTE
+
+.L80D8
+        LDA     #$40
+        TRB     LF4
+ENDIF
         RTS
 
 .L80DD
@@ -1087,6 +1210,7 @@ OSCLI   = $FFF7
 
         EQUB    $E1,$01
 
+IF WHILE
 ; WHILE/ENDWHILE (Change 21) are two-byte escape-statement tokens:
 ; $87 (OFF) prefix + the entry token byte below, emitted by the hook
 ; at L8F5D when flag bit 7 is set. Entry token bytes $DC/$E3 were
@@ -1099,6 +1223,7 @@ OSCLI   = $FFF7
 
         EQUB    $DC,$81
 
+ENDIF
         EQUS    "END"
 
         EQUB    $E0,$01
@@ -1470,10 +1595,12 @@ OSCLI   = $FFF7
         EQUS    "VPOS"
 
         EQUB    $BC,$01
+IF WHILE
 
         EQUS    "WHILE"
 
         EQUB    $E3,$83
+ENDIF
 
         EQUS    "WIDTH"
 
@@ -2710,6 +2837,7 @@ OSCLI   = $FFF7
         ADC     #$40
 .L8F5D
         DEY
+IF WHILE
         BIT     L3D
         BPL     LWEM1
 
@@ -2720,6 +2848,7 @@ OSCLI   = $FFF7
         PLA
         DEY
 .LWEM1
+ENDIF
         JSR     L8DA8
 
         LDX     #$FF
@@ -3044,12 +3173,14 @@ OSCLI   = $FFF7
         BCS     L90DE
 
 .L90EA
+IF WHILE
         CMP     #$87
         BNE     L90EE
 
         JMP     LWTOK
 
 .L90EE
+ENDIF
         LDX     L0B
         STX     L19
         LDX     L0C
@@ -3117,7 +3248,11 @@ OSCLI   = $FFF7
 
         JSR     LB365
 
+IF WHILE
         JMP     L90CA
+ELSE
+        BRA     L90CA
+ENDIF
 
 .L9146
         JMP     L9C2D
@@ -5232,10 +5367,22 @@ OSCLI   = $FFF7
 
 .L9C16
         LDY     L1B
+IF WHILE
         INC     L1B
+ELSE
+.L9C18
+ENDIF
         LDA     (L19),Y
+IF WHILE=0
+        INY
+ENDIF
         CMP     #$20
+IF WHILE
         BEQ     L9C16
+ELSE
+        BEQ     L9C18
+        STY     L1B
+ENDIF
 
         CMP     #$3D
         BEQ     L9C52
@@ -5381,8 +5528,15 @@ OSCLI   = $FFF7
 .L9CD6
         LDY     L1B
         STY     L0A
+IF WHILE
         JSR     LEVAL4
 
+ELSE
+        LDA     L2A
+        ORA     L2B
+        ORA     L2C
+        ORA     L2D
+ENDIF
         BEQ     L9CFB
 
         CPX     #$8C
@@ -5610,8 +5764,17 @@ OSCLI   = $FFF7
         RTS
 
 .L9DF3
+IF WHILE
         JSR     LCPYW
 
+ELSE
+        LDA     L0B
+        STA     L19
+        LDA     L0C
+        STA     L1A
+        LDA     L0A
+        STA     L1B
+ENDIF
 .L9DFF
         JSR     L9E45
 
@@ -6601,7 +6764,26 @@ OSCLI   = $FFF7
         LDA     #$FF
         JMP     L82DD
 
+IF WHILE=0
+; Entry restructured (Change 20): the character checks now precede the
+; state setup, so the literal fast path's fall-back can enter at LNUMD
+; with A = digit value and skip them. EOR #$30 maps '0'-'9' to 0-9 in
+; one test; anything else is restored and must be '.' (leading point)
+; or the number is rejected. After the shared setup, A distinguishes a
+; digit value (0-9) from the '.' marker ($2E).
+ENDIF
 .LA2DD
+IF WHILE=0
+        EOR     #$30
+        CMP     #$0A
+        BCC     LNUMD
+
+        EOR     #$30
+        CMP     #$2E
+        BNE     LA2D6
+
+.LNUMD
+ENDIF
         STZ     L31
         STZ     L32
         STZ     L33
@@ -6611,6 +6793,7 @@ OSCLI   = $FFF7
         STZ     L48
         LDX     #$FF
         STX     L49
+IF WHILE
         CMP     #$2E
         BEQ     LA348
 
@@ -6619,6 +6802,10 @@ OSCLI   = $FFF7
 
         SBC     #$2F
         BMI     LA2D6
+ELSE
+        CMP     #$0A
+        BCS     LA348
+ENDIF
 
 .LA2FB
         STA     L35
@@ -7081,8 +7268,15 @@ OSCLI   = $FFF7
         LDA     L30
         STA     (L4A)
         LDY     #$01
+IF WHILE
         JSR     LSGNP
 
+ELSE
+        LDA     L2E
+        EOR     L31
+        AND     #$80
+        EOR     L31
+ENDIF
         STA     (L4A),Y
         LDA     L32
         INY
@@ -8743,7 +8937,11 @@ OSCLI   = $FFF7
         BCS     LADAC
 
         CMP     #$2E
+IF WHILE
         BCS     LADB6
+ELSE
+        BCS     LNUMF
+ENDIF
 
         CMP     #$26
         BEQ     LADF9
@@ -8759,6 +8957,57 @@ OSCLI   = $FFF7
 
         JMP     LB1DE
 
+IF WHILE=0
+; Single-digit decimal literal fast path. On entry A = first char
+; ($2E-$3E from the dispatch above), Y = its offset, L1B = offset+1.
+; If A is a digit and the next character cannot continue a numeric
+; literal (digit, '.', or 'E'), deliver the integer directly with the
+; exact exit state of LA2DD's integer exit at LA36B: A=1 (integer
+; type), carry set, L2A-L2D = value, L1B already at the terminator.
+; X/Y are scratch (LA2DD's own exits leave them differently per path).
+.LNUMF
+        EOR     #$30
+        CMP     #$0A
+        BCS     LNUMX
+
+        TAX
+        INY
+        LDA     (L19),Y
+        CMP     #$30
+        BCC     LNUM1
+
+        CMP     #$3A
+        BCC     LNUMS
+
+        CMP     #$45
+        BEQ     LNUMS
+
+.LNUM1
+        CMP     #$2E
+        BEQ     LNUMS
+
+.LNUMI
+        TXA
+        STA     L2A
+        STZ     L2B
+        STZ     L2C
+        STZ     L2D
+        LDA     #$01
+        SEC
+        RTS
+
+; Fall-back for a literal that continues: X = first digit VALUE, Y is
+; one past it. LNUMD (inside LA2DD) skips the entry checks; its exits
+; all set carry, so LA2DD's RTS returns straight to the factor's
+; caller with the same contract as the JSR LA2DD path below.
+.LNUMS
+        DEY
+        TXA
+        JMP     LNUMD
+
+.LNUMX
+        EOR     #$30
+ENDIF
 .LADB6
         JSR     LA2DD
 
@@ -9902,8 +10151,15 @@ OSCLI   = $FFF7
         LDA     L30
         STA     (L37)
         LDY     #$01
+IF WHILE
         JSR     LSGNP
 
+ELSE
+        LDA     L2E
+        EOR     L31
+        AND     #$80
+        EOR     L31
+ENDIF
         STA     (L37),Y
         INY
         LDA     L32
@@ -10174,30 +10430,55 @@ OSCLI   = $FFF7
         INC     L3C
 .LB516
         CMP     #$F4
+IF WHILE
         BNE     LB51A
 
         STA     L4C
 .LB51A
         CMP     #$87
+ENDIF
         BNE     LB51C
 
+IF WHILE
         JMP     LWLIST
 
+ELSE
+        STA     L4C
+ENDIF
 .LB51C
         JSR     LBD77
 
+IF WHILE
 .LB51F
+ENDIF
         INY
         BRA     LB4E2
 
 .LB522
+IF WHILE=0
+        LDY     L0A
+        LDA     (L0B),Y
+        CMP     #$0D
+        BEQ     LB_bare
+        CMP     #$3A
+        BEQ     LB_bare
+ENDIF
         JSR     L99C4
+IF WHILE
 
+ENDIF
         BNE     LB530
+IF WHILE
 
+ELSE
+.LB_bare
+        STY     L1B
+ENDIF
         LDX     L26
         BEQ     LB563
+IF WHILE
 
+ENDIF
         BCS     LB56A
 
 .LB52D
@@ -10302,9 +10583,19 @@ OSCLI   = $FFF7
         LDA     L0527,X
         STY     L0B
         STA     L0C
+IF WHILE
         JSR     L9C8A
+ELSE
+        JSR     L9C8E
+ENDIF
 
+IF WHILE
         JMP     L90D0
+ELSE
+        LDY     #$01
+        STY     L0A
+        JMP     L90D2
+ENDIF
 
 .LB5DF
         TXA
@@ -11125,22 +11416,33 @@ OSCLI   = $FFF7
 .LBA46
         RTS
 
+IF WHILE
 ; Shared loop-condition evaluator (UNTIL, WHILE, ENDWHILE): evaluate
 ; the expression at the current text pointer, resync (includes the
 ; Escape check via L9C55), coerce to integer; returns A = zero flag
 ; of the 4-byte result (Z set = FALSE).
 .LEVAL
+ELSE
+.LBA47
+ENDIF
         JSR     L9DF3
 
         JSR     L9C55
 
         JSR     L9781
 
+IF WHILE
 .LEVAL4
+ELSE
+        LDX     L24
+        BEQ     LBA2B
+
+ENDIF
         LDA     L2A
         ORA     L2B
         ORA     L2C
         ORA     L2D
+IF WHILE
         RTS
 
 .LBA47
@@ -11150,6 +11452,7 @@ OSCLI   = $FFF7
         BEQ     LBA2B
 
         TAY
+ENDIF
         BEQ     LBA63
 
         DEC     L24
@@ -11181,10 +11484,14 @@ OSCLI   = $FFF7
         TYA
         RTS
 
+IF WHILE
 ; Shared loop-stack push (REPEAT, WHILE): depth check, normalise the
 ; text pointer (folds Y, sets L0A=1), push it. Enter with Y = offset
 ; of the last consumed byte, as REPEAT always has.
 .LPUSH
+ELSE
+.LBA88
+ENDIF
         LDX     L24
         CPX     #$14
         BCS     LBA35
@@ -11196,11 +11503,13 @@ OSCLI   = $FFF7
         LDA     L0C
         STA     L0514,X
         INC     L24
+IF WHILE
         RTS
 
 .LBA88
         JSR     LPUSH
 
+ENDIF
         JMP     L90D0
 
 .LBAA0
@@ -11511,8 +11820,15 @@ OSCLI   = $FFF7
         LDA     L30
         STA     (L04)
         LDY     #$01
+IF WHILE
         JSR     LSGNP
 
+ELSE
+        LDA     L2E
+        EOR     L31
+        AND     #$80
+        EOR     L31
+ENDIF
         STA     (L04),Y
         INY
         LDA     L32
@@ -12032,6 +12348,7 @@ OSCLI   = $FFF7
         EQUS    "yntax",$00
         EQUS    "ro",$00
 
+IF WHILE
 ; ---------------------------------------------------------------
 ; WHILE/ENDWHILE (Change 21). Statement dispatch lands here on the
 ; $87 escape prefix; the second token byte selects the construct.
@@ -12193,6 +12510,7 @@ OSCLI   = $FFF7
 .LWLF
         JMP     LB51F
 
+ENDIF
 ; Padding: everything from LBE95 to the end of the ROM is pinned at its
 ; original address (the page-$BF constant pool is addressed via #LO(...)
 ; immediates with an implied high byte of $BF, the LBF00/LBEFE compare
@@ -12411,5 +12729,9 @@ LBEFE = LBEFD+1
         EQUB    $FD,$13,$04,$81,$E6,$66,$66,$66
 
 .BeebDisEndAddr
-SAVE "Basic432.bin",BeebDisStartAddr,BeebDisEndAddr
+IF WHILE
+SAVE "Basic432_while.bin",BeebDisStartAddr,BeebDisEndAddr
+ELSE
+SAVE "Basic432_fast.bin",BeebDisStartAddr,BeebDisEndAddr
+ENDIF
 

@@ -1,0 +1,48 @@
+# Builds the two variants of the 65C02-optimised BBC BASIC 4r32 ROM
+# from the single conditional source disassembly/Basic432.asm:
+#
+#   Basic432_fast.bin   - speed features (Changes 11/13/14/19/20), no WHILE
+#   Basic432_while.bin  - WHILE/ENDWHILE (Change 21), speed features reverted
+#
+# The variants are mutually exclusive: the 16K image cannot hold both.
+# Requires beebasm >= 1.10 (for -D); override with BEEBASM=/path/to/beebasm.
+
+BEEBASM ?= beebasm
+DIS     := disassembly
+
+ROMS := $(DIS)/Basic432_while.bin $(DIS)/Basic432_fast.bin
+
+all: $(ROMS)
+
+$(DIS)/Basic432_while.bin: $(DIS)/Basic432.asm
+	cd $(DIS) && $(BEEBASM) -i Basic432.asm -D WHILE=1
+
+$(DIS)/Basic432_fast.bin: $(DIS)/Basic432.asm
+	cd $(DIS) && $(BEEBASM) -i Basic432.asm -D WHILE=0
+
+# Verify the built ROMs match the committed reference images.
+check: all
+	cmp $(DIS)/Basic432_while.bin $(DIS)/Basic432_while.orig
+	cmp $(DIS)/Basic432_fast.bin $(DIS)/Basic432_fast.orig
+	@echo "both variants match their reference images"
+
+# Update the committed reference images and hex dumps (run after an
+# intentional ROM change, then commit the results).
+refs: all
+	cp $(DIS)/Basic432_while.bin $(DIS)/Basic432_while.orig
+	cp $(DIS)/Basic432_fast.bin  $(DIS)/Basic432_fast.orig
+	xxd $(DIS)/Basic432_while.bin > $(DIS)/Basic432_while.hex
+	xxd $(DIS)/Basic432_fast.bin  > $(DIS)/Basic432_fast.hex
+
+# Rebuild the test disc: both ROMs plus the *EXEC-able test suites.
+disc: all
+	python3 tools/mkssd.py tests/basic432.ssd \
+	    WHILE=$(DIS)/Basic432_while.bin,8000,8000 \
+	    FAST=$(DIS)/Basic432_fast.bin,8000,8000 \
+	    STEST=tests/selftest.txt \
+	    WTEST=tests/whiletest.txt
+
+clean:
+	rm -f $(ROMS)
+
+.PHONY: all check refs disc clean
