@@ -76,16 +76,79 @@ doesn't happen.
 
 We found it interesting that the same bug affected both LN and ATN, the reason being that both use the same coefficients (but with different signs) and therefore the same tables. ACS and ASN are computed from ATN, so they inherit the bug, and the fix.
 
+## Structured programming: WHILE and block IF/ELSE/ENDIF
+
+The `while` variant of the ROM adds two BASIC V-style structured
+constructs to BASIC IV, still within the original 16K:
+
+- `WHILE <expr>` ... `ENDWHILE` — condition re-evaluated at
+  ENDWHILE, so the forward scan for the matching ENDWHILE runs at
+  most once per loop; nests freely with itself, FOR/NEXT and
+  REPEAT/UNTIL (it shares the REPEAT stack and its depth limit).
+- `IF <expr> THEN` at the end of a line ... `ELSE` (first on a
+  line) ... `ENDIF` — multi-line IF with an optional ELSE clause and
+  full nesting. `THEN` as the last item on the line is what opens a
+  block, exactly as in BASIC V; single-line
+  `IF ... THEN ... ELSE ...` is completely unchanged.
+
+Both are real tokens, entered through the ROM's tokeniser (typed,
+`*EXEC`, or LOAD of a file it saved), abbreviations `W.`, `ENDW.`,
+`ENDI.` included, and LIST round-trips them. Programs written with
+them behave identically under BASIC V on the Archimedes. A taste —
+`tests/basic432.ssd` carries this as a tokenised program
+(`CHAIN "BSEARCH"`):
+
+```
+   10 DIM A%(9)
+   20 FOR I% = 0 TO 9: A%(I%) = I%*2+1: NEXT
+   30 key% = 13
+   40 lo% = 0: hi% = 9: found% = -1
+   50 WHILE (lo% <= hi%) AND (found% = -1)
+   60   mid% = (lo% + hi%) DIV 2
+   70   IF A%(mid%) = key% THEN
+   80     found% = mid%
+   90   ELSE
+  100     IF A%(mid%) < key% THEN
+  110       lo% = mid% + 1
+  120     ELSE
+  130       hi% = mid% - 1
+  140     ENDIF
+  150   ENDIF
+  160 ENDWHILE
+  170 IF found% = -1 THEN
+  180   PRINT key%; " not found"
+  190 ELSE
+  200   PRINT key%; " found at index "; found%
+  210 ENDIF
+```
+
+The space came from inside the ROM itself: reverting this project's
+own speed features, a service-call frill strip, a map-free rewrite of
+RENUMBER (which as a side effect abolishes the `RENUMBER space`
+error), and a long tail of byte-scavenging described in
+`OPTIMISATIONS.md` (Changes 21, 23–27). Every token code was already
+taken, so WHILE, ENDWHILE and ENDIF are two-byte tokens behind an OFF
+($87) escape prefix — unrepresentable in any pre-existing program,
+and invisible to host-side tokenisers, which is why the constructs
+must be entered through the ROM. New errors: `No REPEAT` (43, stray
+ENDWHILE), `Too many REPEATs` (44), `No ENDWHILE` (46), `No ENDIF`
+(47), matching BASIC IV's spare error-number space.
+
 ## Pre-built ROMs
 
 Two ready-to-use 16K ROM images built from `disassembly/Basic432.asm`
 (see `OPTIMISATIONS.md` for what each contains, and the `Makefile`
 for how they are built and verified):
 
-- `roms/Basic432_fast.rom` — the speed-optimised variant
-- `roms/Basic432_while.rom` — the WHILE/ENDWHILE variant, which since
-  Changes 24/27 also has BASIC V-style block `IF <expr> THEN` ...
-  `ELSE` ... `ENDIF` with full nesting
+- `roms/Basic432_while.rom` — WHILE/ENDWHILE and block IF/ELSE/ENDIF
+  as above, plus the LN/ATN fix; interpreter speed is within a few
+  cycles per statement of the original 4r32
+- `roms/Basic432_fast.rom` — no new constructs, instead the speed
+  features (faster tight FOR/NEXT loops, single-digit constants,
+  string stores), plus the LN/ATN fix
 
-Both require a 65C02. `tests/README.md` has a recipe for running them
-under jsbeeb's Master 128.
+Both require a 65C02 (Master 128, or a B with a 65C02 fitted). The
+two feature sets do not fit in 16K together — that trade and every
+byte of how it was paid for are documented in `OPTIMISATIONS.md`.
+`tests/README.md` has a recipe for running the ROMs and their test
+suites under jsbeeb's Master 128.
