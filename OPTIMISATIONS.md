@@ -1025,6 +1025,48 @@ loops): B1=318 B2=368 B3=712 B4=677.
   mined, the while variant reaches ~60-65 free bytes - not enough for
   the ~155-byte block-IF; the fast variant can fund block-IF from its
   still-present service frills (~142) plus this mining.
+- **Algorithmic speed-for-size trades (second-pass survey):** a
+  ROM-wide unroll census (consecutive repeated instruction groups)
+  found exactly two unrolled loops in 16K — the 4x mantissa shift at
+  L83D3 (trig path, -8 if rolled) and a 3-byte descriptor copy at
+  LBCEA (warm string/stack path, -5, not licensed) — Sophie already
+  loops everything cold. The one genuine algorithmic find is
+  **RENUMBER map elimination (~-45)**: RENUMBER currently builds a
+  table of every old line number below the string area (pass 1,
+  ~42 bytes incl. the `RENUMBER space` error), rewrites the headers,
+  then resolves each $8D reference by walking the map and the
+  renumbered program in lockstep. Instead: patch references *first*,
+  resolving each old target by walking the program from the top and
+  accumulating `new = start + step` per line until the (still-old)
+  header matches — the walk is the multiply, no map, no workspace
+  bound (the `RENUMBER space` error becomes impossible). Cost:
+  O(refs x lines), ~1-2 s on a 500-line/300-reference program vs
+  near-instant today; behaviour delta: `Failed at` reports the
+  referencing line's *old* number (references are patched before
+  headers are renumbered). Smaller adjacent trade: simplifying the
+  assembler OPT-listing column alignment/wrap (~-12-20, cosmetic
+  output change). Investigated and rejected: front-coding the keyword
+  table (shared-prefix elision saves ~40-70 text bytes across the
+  RE-/OPEN-/STR- families, but the matcher rework plus LBD77's
+  detokeniser needing prefix reconstruction costs ~55-65 — net ~0 at
+  high risk). The assembler itself is already built size-first
+  (mnemonics hashed 3x5 bits into 2-byte packed entries with a linear
+  search, one 68-byte mode/opcode table, no fast paths to delete):
+  its only real lever is excision (~1170 bytes, see below).
+- **Assembler excision (sized, not built):** the assembler span
+  (L894E-L8D9B plus the 68-byte L8909 table and the `[` dispatch
+  hook) is almost perfectly self-contained — of its 96 labels only
+  three are referenced from outside: L89DD (the `[` entry itself) and
+  the two 6-byte skip-space/compare helpers L8D9C/L8DA2 at its tail,
+  which are shared with PRINT#/AUTO/DELETE/RENUMBER and would stay
+  outside the gate (an RTS immediately precedes them — a clean flow
+  boundary). Nothing falls through in or out; with the `[` trigger
+  gated away, `[` degrades naturally to `Mistake`; the L28 (OPT)
+  pass-1 undefined-variable check in the factor evaluator goes dead
+  harmlessly. An `ASM=0` build symbol would free **~1170 bytes** —
+  enough to fund block-IF plus every reverted speed feature plus the
+  service frills simultaneously in a single variant, at the cost of
+  `[ ]` assembly.
 - **Restoring the performance features:** Changes 11/13/14/19/20a are
   cleanly revertable from git history if WHILE/ENDWHILE is ever
   dropped, or fundable by the companion-bank design sketched in the
