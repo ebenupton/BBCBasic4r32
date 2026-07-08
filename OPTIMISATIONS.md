@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 26 changes to the ROM, targeting the 65C02.
+This memo describes 27 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -904,12 +904,9 @@ round-trip back to 10,10; `Silly` for RENUMBER 10,0.
 (replacing LWS1/LWS2/LWEOL/LWNOE), L9D0C (IF false path), LWLIST.
 
 `IF <expr> THEN` as the last thing on a line now opens a multi-line
-block closed by `ENDIF`, with full nesting — BASIC V's block IF minus
-the ELSE clause (a strict subset: anything written for it behaves
-identically under BASIC V, and ELSE can be grafted on later without
-syntax changes if bytes ever appear; roughly half the full block-IF
-cost was ELSE). A block ELSE fails noisily: the true path executes it
-at statement position, which is `Mistake`.
+block closed by `ENDIF`, with full nesting — BASIC V's block IF, at first
+without the ELSE clause (grafted on later exactly as anticipated:
+see Change 27).
 
 **Tokens.** ENDIF = $87 $E1 ("OFF ENDPROC"), the third OFF-prefix
 pair. $E1 is ENDPROC's token, whose keyword entry precedes the new
@@ -1043,6 +1040,60 @@ test — all four indirect modes emit correct opcodes (B1/81/6C/B2
 through the wrapped ')' checks) and `LDA (&70,Y)` still errors
 `Index`; ON..ELSE fallthrough (the L9330 retarget); STEST 55/0 twice,
 WTEST 15/0, ITEST 16/0; benchmarks unchanged.
+
+---
+
+## Change 27: block ELSE (while variant)
+
+**Location:** the scanner's per-line tail (relocated after LWCONT)
+and the L90EA dispatch hook.
+
+The Change 24 block IF gains its ELSE clause, completing the BASIC V
+block IF (minus ELSE-less pricing caveats): `IF <expr> THEN` at end
+of line ... `ELSE` (first on a line, leading spaces allowed) ...
+`ENDIF`. Cost was expected at ~40+ when Change 24 shipped; the
+machinery built since brought it in at 30 bytes, because both halves
+turn out to be hooks into things that already exist:
+
+**False path** (~23): after the scanner's per-line fold, in IF mode
+at depth 1, the line's first non-space byte is checked (via LWGET,
+which consumes the spaces - harmless to the scan); $8B ends the scan
+and resumes via L9CED, the single-line ELSE's own resumption, so
+`ELSE <statements>` and the `ELSE <line>` GOTO shorthand work
+identically to single-line IF. A non-ELSE byte is re-dispatched.
+The check lives with LWEOL, relocated after LWCONT so LWHILE's
+branch stays in range (the relocation is why the measured cost
+undercuts the estimate).
+
+**True path** (7): the key discovery is that no line-start
+disambiguation is needed. A mid-statement ELSE never reaches the
+dispatcher - L9C6A accepts $8B as a statement separator and L9082/
+L9073 then skip the rest of the line, which IS the single-line ELSE
+mechanism - so an $8B arriving at L90EA's dispatch fall-path (until
+now `Mistake`) can only be a statement-position ELSE: line start, or
+after a colon. The hook sends it to LWISC, the existing executed-
+ENDIF scan, which skips to the matching ENDIF (nesting-aware,
+further ELSEs ignored at depth).
+
+Quirks, documented: `IF a THEN x : ELSE y` on the true path was
+`Mistake` and is now a scan for ENDIF (`No ENDIF` if there is none);
+a stray statement-position ELSE likewise (was `Mistake`); a block
+with multiple ELSEs runs each ELSE-to-ELSE segment the way the
+false-path/executed-ELSE scans land on them (single-ELSE blocks are
+exactly BASIC V). Single-line `IF ... THEN ... ELSE ...` is
+untouched in both truth directions.
+
+**Spent: 30 bytes** (funded by Changes 23/25/26; the pool holds 2).
+Fast variant bit-identical.
+
+**Verified** (jsbeeb, Master 128): ITEST extended to 26 checks -
+false/true blocks with ELSE, indented ELSE, `ELSE <stmt>`,
+`ELSE <line>` shorthand, nesting both ways (outer-false scan passing
+an inner ELSE at depth 2; inner ELSE stop plus executed outer ELSE
+skip in one block), single-line ELSE regression both ways, WHILE
+scan passing a block-IF-with-ELSE, stray-ELSE and missing-ENDIF
+errors (both 47) - 26/0; STEST 55/0, WTEST 15/0, benchmarks
+unchanged.
 
 ---
 
@@ -1181,9 +1232,10 @@ the battery.
 | | LBA6E, LFETN, LWGET x2, L83D5 | -31/-28 | cold-path extractions and the last unroll |
 | 25 | LSGNP -> LBF66 | -15 | while only: helper + folded LDY #$01 fill the dead Tube check exactly |
 | 26 | L9330 x2, LST27, LPO39, LMTCH, LRSYN, LSKRB | -16 | preamble folds + call-pair wrappers |
-| | (SKIPTO pool) | +32 while / +89 fast | |
+| 27 | block ELSE | -30 spent | completes BASIC V block IF |
+| | (SKIPTO pool) | +2 while / +89 fast | |
 
-The while variant uses all 16384 bytes exactly, 32 of which are free
+The while variant uses all 16384 bytes exactly, 2 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
@@ -1191,7 +1243,7 @@ stranded in the pinned region. The fast variant's pool holds 89 and
 its LBF66 is live. The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and
-gains WHILE/ENDWHILE and block IF/ENDIF. Benchmarks (centiseconds, Master 128, suite
+gains WHILE/ENDWHILE and full block IF/ELSE/ENDIF. Benchmarks (centiseconds, Master 128, suite
 loops): B1=318 B2=368 B3=712 B4=677.
 
 ## Rejected / future candidates

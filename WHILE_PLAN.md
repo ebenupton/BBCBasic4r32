@@ -408,7 +408,10 @@ reinstating Changes 13/14.
 > WHILE scanner (mode byte in L2D) rather than duplicated. ELSE —
 > roughly half the cost estimated below — remains future work, and
 > the syntax is forward-compatible with adding it. See
-> OPTIMISATIONS.md Change 24.
+> OPTIMISATIONS.md Change 24. **ELSE followed as Change 27**, at 30
+> bytes against the ~40+ estimated below — the unified scanner and
+> the discovery that L9C6A already filters mid-line ELSEs made both
+> halves cheap hooks.
 
 BASIC V's block IF (`s/Stmt`, labels ELSEBLK/ELSE2/ENDIF) is
 **completely stateless** — no control-stack entry exists for it; it is

@@ -3167,9 +3167,19 @@ ENDIF
 .L90EA
 IF WHILE
         CMP     #$87
-        BNE     L90EE
+        BNE     LWEL0
 
         JMP     LWTOK
+
+; Executed block-ELSE (Change 27): a statement-position ELSE - only
+; reachable at line start or after a colon, since L9C6A consumes a
+; mid-line ELSE as a separator - skips to the matching ENDIF via the
+; scanner. Was 'Mistake'.
+.LWEL0
+        CMP     #$8B
+        BNE     L90EE
+
+        JMP     LWISC
 
 .L90EE
 ENDIF
@@ -12426,16 +12436,7 @@ IF WHILE
         BNE     LWS1D
 
         INX
-.LWEOL
-        LDY     L0A
-        LDA     (L0B),Y
-        BMI     LWNOE
-
-        INY
-        INY
-        JSR     L9C80
-
-        BRA     LWS1
+        BRA     LWEOL
 
 .LWS87
         JSR     LWGET
@@ -12491,6 +12492,39 @@ IF WHILE
         PLA
 .LWCONT
         JMP     L90CA
+
+; Per-line processing for the scanner, relocated here to keep LWHILE's
+; branch to LWCONT in range. After the fold, in IF mode at depth 1, a
+; line-start ELSE (leading spaces allowed - LWGET consumes them, which
+; is harmless to the scan) ends the false-path scan (Change 27); the
+; resumption is the single-line ELSE's own (L9CED: line-number
+; shorthand or statements). A non-ELSE first byte is re-dispatched.
+.LWEOL
+        LDY     L0A
+        LDA     (L0B),Y
+        BMI     LWNOE
+
+        INY
+        INY
+        JSR     L9C80
+
+        CPX     #$01
+        BNE     LWS1
+
+        LDA     L2D
+        LSR     A
+        BCC     LWS1
+
+.LWEL1
+        JSR     LWGET
+
+        CMP     #$20
+        BEQ     LWEL1
+
+        CMP     #$8B
+        BNE     LWS1D
+
+        JMP     L9CED
 
 .LWEX
         DEC     L24

@@ -84,8 +84,8 @@ for how they are built and verified):
 
 - `roms/Basic432_fast.rom` — the speed-optimised variant
 - `roms/Basic432_while.rom` — the WHILE/ENDWHILE variant, which since
-  Change 24 also has BASIC V-style (ELSE-less) block `IF <expr> THEN`
-  ... `ENDIF` with full nesting
+  Changes 24/27 also has BASIC V-style block `IF <expr> THEN` ...
+  `ELSE` ... `ENDIF` with full nesting
 
 Both require a 65C02. `tests/README.md` has a recipe for running them
 under jsbeeb's Master 128.

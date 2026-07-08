@@ -21,8 +21,8 @@ B4=653 (a couple of centiseconds of timer jitter is normal).
 
 `whiletest.bas` (on the disc as `WTEST`, also `*EXEC`-able) is the
 WHILE/ENDWHILE acceptance battery: expect `PASS=15 FAIL=0`.
-`iftest.bas` (`ITEST`) is the block IF...THEN/ENDIF battery
-(Change 24, while variant only): expect `PASS=16 FAIL=0`. Note that
+`iftest.bas` (`ITEST`) is the block IF...THEN/ELSE/ENDIF battery
+(Changes 24 and 27, while variant only): expect `PASS=26 FAIL=0`. Note that
 WHILE programs must be entered through the ROM's own tokeniser
 (typed, `*EXEC`, or LOAD of a ROM-tokenised file) — host-side
 tokenisers such as jsbeeb's `load_basic` do not know the new tokens.
@@ -63,7 +63,7 @@ is the speed-features variant.
    B3=712 B4=677, FAST variant B1=267 B2=336 B3=708 B4=653. On the
    WHILE variant, `*EXEC WTEST` runs the WHILE/ENDWHILE battery
    (expect `PASS=15 FAIL=0`) and `*EXEC ITEST` the block
-   IF...THEN/ENDIF battery of Change 24 (expect `PASS=16 FAIL=0`).
+   IF/ELSE/ENDIF battery of Changes 24/27 (expect `PASS=26 FAIL=0`).
    Type `NEW` between `*EXEC` runs — `*EXEC` merges over the resident
    program, and leftover lines from a previous suite wreck the next
    one in confusing ways.
