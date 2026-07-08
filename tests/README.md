@@ -16,8 +16,9 @@ Expected result: `PASS=55 FAIL=0` on both variants (the LN1000,
 LNFIX and ATNFIX checks assert the mathematically correct values,
 which the ROM produces since the Change 22 LN/ATN carry-bug fix).
 Benchmark expectations (centiseconds, Master 128): WHILE variant
-B1=318 B2=368 B3=712 B4=677, FAST variant B1=267 B2=336 B3=708
-B4=653 (a couple of centiseconds of timer jitter is normal).
+B1=318 B2=368 B3=712 B4=677, FAST variant B1=266 B2=322 B3=701
+B4=628 since the Change 28 resident-integer factor fast path (a
+couple of centiseconds of timer jitter is normal).
 
 `whiletest.bas` (on the disc as `WTEST`, also `*EXEC`-able) is the
 WHILE/ENDWHILE acceptance battery: expect `PASS=15 FAIL=0`.

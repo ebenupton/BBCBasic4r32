@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 27 changes to the ROM, targeting the 65C02.
+This memo describes 28 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1097,6 +1097,75 @@ unchanged.
 
 ---
 
+## Change 28: fast-variant performance pass (resident-integer factors)
+
+**Location:** LADAC (gated), LFRES/LNUMF in the cold helper cluster,
+L99D8 micro. Fast variant only; the while image is bit-identical.
+
+**Method.** PC-sampling profile (jsbeeb) of `I%=I%+B%:UNTIL I%>C%`:
+~40% of integer-loop time sits in the variable name parse
+(L99D8/L9A67) and another ~20% in the factor evaluator's entry - four
+name lookups per iteration, ~88-120 cycles each even for resident
+integers. ClockSp 2.10 (J.G.Harston, mdfs.net) used as the broad
+benchmark; its loops are variable-vs-variable arithmetic, which is
+what real programs do (the earlier literal fast path never fires
+there).
+
+**The gate (LADAC).** Every variable factor peeks the second
+character once. '%' routes out of line to LFRES; any other second
+character on a name-class first character enters the generic parse
+at L99FA directly - PAST the uppercase/resident checks it would only
+repeat - so named variables (the common untyped `X`) get slightly
+FASTER, not slower. Anything below '@' ('?' unary indirection) keeps
+the original path. A first attempt that gated inside LFRES cost
+named-variable factors ~43 cycles of failed checks and measurably
+regressed ClockSp's Real REPEAT loop (2.36 -> 2.25); the feed-forward
+design was the fix - measure, don't hope.
+
+**LFRES.** @%-Z% + '%' with no '(', '!' or '?' following is a fixed
+page-4 slot: the 4 bytes are copied to the IWA by absolute,X
+addressing (slot = 4x the character, page 4) with no pointer, no
+LB1DE dispatch, no exit checks. The '!'/'?' punts are load-bearing:
+dyadic indirection exists ONLY as the name-parse absorption (there
+is no expression-level dyadic '!' - `PRINT I%!0` with the punts
+removed parses as two print items), verified empirically.
+
+**Layout.** The LNUMF literal fast path moved to the same cluster
+(reached via the LNUMT trampoline, +3 cycles per single-digit
+literal) because the LAD78-LAE62 region is too branch-dense to grow;
+its literal-continues exit is now a local un-EOR + `JMP LADB6`.
+Micros: L99D8's resident setup uses one register for the two $04s
+(-2), LNUMI uses STX (-1).
+
+**Reverts evaluated** (per the hot-path-cost review): the L83D5
+mantissa-shift roll stays (+~50 cycles inside a 2000+-cycle trig
+call, ~1%; ClockSp Trig confirms 6.92 -> 7.00 with this pass);
+LB454's LFETN call stays (+12 cycles per GOTO against its
+hundreds-of-cycles line search; the byte funds the factor path).
+
+**Validated but shelved for bytes: GOTO forward search.** A reworked
+LB866 that searches from the current line when `(L0B)` sits on the
+line's $0D (jump as first statement of a line - the classic idiom)
+and the target is >= the current number, entering L8191's loop at
+L8197 with L3D/L3E preset, falling back to the full search on any
+miss so a wrong guess can never error. Fully verified in jsbeeb
+(forward/backward/self/mid-line/ON GOTO/GOSUB/RETURN/missing-line/
+immediate mode) before being cut for space; the design is in this
+section's history (commit diff) ready for future funding (~36
+bytes). It cuts a ~28-cycles-per-line program walk to near zero for
+forward line-start jumps.
+
+**Measured** (jsbeeb Master 128; ClockSp vs the pre-change ROM):
+Integer REPEAT 2.24 -> 2.50 MHz-equivalent (+11.6%), Real REPEAT
+2.36 -> 2.39, Variant REPEAT 2.36 -> 2.37, Trig/Log 6.92 -> 7.00,
+String 2.70 -> 2.72, FOR loops and PROC/GOSUB unchanged, average
+2.85 -> 2.89. STEST: B2 335 -> 322, B4 651 -> 628, PASS=55.
+Semantics verified: I%!0/I%?1/I%!J%/I%?J% against known values,
+DIM I%() array coexistence, lowercase i%, unary ?, @% intact.
+Spent: 84 of the 89-byte pool (5 remain).
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1233,13 +1302,14 @@ the battery.
 | 25 | LSGNP -> LBF66 | -15 | while only: helper + folded LDY #$01 fill the dead Tube check exactly |
 | 26 | L9330 x2, LST27, LPO39, LMTCH, LRSYN, LSKRB | -16 | preamble folds + call-pair wrappers |
 | 27 | block ELSE | -30 spent | completes BASIC V block IF |
-| | (SKIPTO pool) | +2 while / +89 fast | |
+| 28 | LADAC/LFRES | -84 spent | fast only: resident-integer factor fast path |
+| | (SKIPTO pool) | +2 while / +5 fast | |
 
 The while variant uses all 16384 bytes exactly, 2 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 89 and
+stranded in the pinned region. The fast variant's pool holds 5 and
 its LBF66 is live. The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and

@@ -3847,6 +3847,106 @@ ENDIF
         EQUB    $00
         EQUS    "Silly",$00
 
+IF WHILE=0
+; Single-digit decimal literal fast path. On entry A = first char
+; ($2E-$3E from the dispatch above), Y = its offset, L1B = offset+1.
+; If A is a digit and the next character cannot continue a numeric
+; literal (digit, '.', or 'E'), deliver the integer directly with the
+; exact exit state of LA2DD's integer exit at LA36B: A=1 (integer
+; type), carry set, L2A-L2D = value, L1B already at the terminator.
+; X/Y are scratch (LA2DD's own exits leave them differently per path).
+.LNUMF
+        EOR     #$30
+        CMP     #$0A
+        BCS     LNUMU
+
+        TAX
+        INY
+        LDA     (L19),Y
+        CMP     #$30
+        BCC     LNUM1
+
+        CMP     #$3A
+        BCC     LNUMS
+
+        CMP     #$45
+        BEQ     LNUMS
+
+.LNUM1
+        CMP     #$2E
+        BEQ     LNUMS
+
+.LNUMI
+        STX     L2A
+        STZ     L2B
+        STZ     L2C
+        STZ     L2D
+        LDA     #$01
+        SEC
+        RTS
+
+; Fall-back for a literal that continues: X = first digit VALUE, Y is
+; one past it. LNUMD (inside LA2DD) skips the entry checks; its exits
+; all set carry, so LA2DD's RTS returns straight to the factor's
+; caller with the same contract as the JSR LA2DD path below.
+.LNUMS
+        DEY
+        TXA
+        JMP     LNUMD
+
+.LNUMU
+        EOR     #$30
+        JMP     LADB6
+
+ENDIF
+
+IF WHILE=0
+; Resident-integer factor delivery (Change 28): X = first char (from
+; the LADAC gate, known to be followed by '%'), Y at the '%'. @%-Z%
+; with no '(', '!' or '?' after the '%' is a fixed page-4 slot -
+; copy it straight into the IWA. Anything else (lowercase i%, arrays,
+; indirection) restores the state and re-enters the generic path.
+.LFRES
+        CPX     #$40
+        BCC     LFREX
+
+        CPX     #$5B
+        BCS     LFREX
+
+        INY
+        LDA     (L19),Y
+        CMP     #$28
+        BEQ     LFREX
+
+        CMP     #$21
+        BEQ     LFREX
+
+        CMP     #$3F
+        BEQ     LFREX
+
+        STY     L1B
+        TXA
+        ASL     A
+        ASL     A
+        TAX
+        LDA     L0400,X
+        STA     L2A
+        LDA     L0401,X
+        STA     L2B
+        LDA     L0402,X
+        STA     L2C
+        LDA     L0403,X
+        STA     L2D
+        LDA     #$40
+        RTS
+
+.LFREX
+        LDY     L1B
+        DEY
+        TXA
+        JMP     LADGN
+
+ENDIF
 ; Call-pair wrappers (Change 26): three JSR pairs and one
 ; JSR+compare, each repeated at 3-4 cold sites, folded into
 ; tail-calling wrappers.
@@ -4946,10 +5046,16 @@ ENDIF
         CMP     #$25
         BNE     L99FA
 
+IF WHILE
         LDA     #$04
         STA     L2B
         LDX     #$04
         STX     L2C
+ELSE
+        LDX     #$04
+        STX     L2B
+        STX     L2C
+ENDIF
         INY
         LDA     (L19),Y
         CMP     #$28
@@ -8951,7 +9057,7 @@ ENDIF
 IF WHILE
         BCS     LADB6
 ELSE
-        BCS     LNUMF
+        BCS     LNUMT
 ENDIF
 
         CMP     #$26
@@ -8961,64 +9067,43 @@ ENDIF
         BEQ     LADEE
 
 .LADAC
-        DEC     L1B
-        JSR     L99D8
-
-        BEQ     LADBC
-
-        JMP     LB1DE
-
 IF WHILE=0
-; Single-digit decimal literal fast path. On entry A = first char
-; ($2E-$3E from the dispatch above), Y = its offset, L1B = offset+1.
-; If A is a digit and the next character cannot continue a numeric
-; literal (digit, '.', or 'E'), deliver the integer directly with the
-; exact exit state of LA2DD's integer exit at LA36B: A=1 (integer
-; type), carry set, L2A-L2D = value, L1B already at the terminator.
-; X/Y are scratch (LA2DD's own exits leave them differently per path).
-.LNUMF
-        EOR     #$30
-        CMP     #$0A
-        BCS     LNUMX
+; Variable-factor gate (Change 28). Peek the second character once:
+; '%' means a resident-integer candidate (out of line at LFRES);
+; anything else on a name-class first char enters the generic parse
+; at L99FA directly, PAST the resident checks it would only repeat -
+; so named variables get faster here, not slower. '?' (and anything
+; below '@') keeps the original path for unary indirection.
+        CMP     #$40
+        BCC     LADGN
 
         TAX
         INY
         LDA     (L19),Y
-        CMP     #$30
-        BCC     LNUM1
+        CMP     #$25
+        BEQ     LADJ
 
-        CMP     #$3A
-        BCC     LNUMS
+        DEC     L1B
+        JSR     L99FA
 
-        CMP     #$45
-        BEQ     LNUMS
+        BRA     LADCT
 
-.LNUM1
-        CMP     #$2E
-        BEQ     LNUMS
+.LADJ
+        JMP     LFRES
 
-.LNUMI
-        TXA
-        STA     L2A
-        STZ     L2B
-        STZ     L2C
-        STZ     L2D
-        LDA     #$01
-        SEC
-        RTS
+.LNUMT
+        JMP     LNUMF
 
-; Fall-back for a literal that continues: X = first digit VALUE, Y is
-; one past it. LNUMD (inside LA2DD) skips the entry checks; its exits
-; all set carry, so LA2DD's RTS returns straight to the factor's
-; caller with the same contract as the JSR LA2DD path below.
-.LNUMS
-        DEY
-        TXA
-        JMP     LNUMD
-
-.LNUMX
-        EOR     #$30
+.LADGN
 ENDIF
+        DEC     L1B
+        JSR     L99D8
+
+.LADCT
+        BEQ     LADBC
+
+        JMP     LB1DE
+
 .LADB6
         JSR     LA2DD
 
@@ -9121,6 +9206,7 @@ ENDIF
         LDA     #$40
         RTS
 
+
 .LAE34
         JSR     L9779
 
@@ -9150,6 +9236,7 @@ ENDIF
 
 .LAE56
         JMP     L9155
+
 
 .LAE59
         JSR     LAD78
@@ -9841,6 +9928,7 @@ ENDIF
         CPY     #$05
         BEQ     LB205
 
+.LBINT
         LDY     #$03
         LDA     (L2A),Y
         STA     L2D
