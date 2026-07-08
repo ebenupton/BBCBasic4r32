@@ -979,16 +979,22 @@ The 11 pinned bytes of the Tube-presence check LBF66 ($BF66-$BF70)
 are dead in the while variant — their only caller went with the
 Change 21 service strip — but can never flow into the SKIPTO pool,
 because nothing in the pinned region can shift. They can, however,
-host relocated code: the 9-byte sign-pack helper LSGNP (standalone,
-RTS-terminated, JSR-only callers) moves there under `IF WHILE`, a
-`SKIPTO &BF71` pads the 2 spare bytes, and its old 9 shiftable bytes
-flow into the pool, which grows from 1 to 10. The fast variant keeps
-the live Tube check and is bit-identical to before. LSGNP was the
-only relocatable fit: LWGET is 7 bytes (worse), LCPYW (13) and
+host relocated code: the sign-pack helper LSGNP (standalone,
+RTS-terminated, JSR-only callers) moves there under `IF WHILE`.
+On its own LSGNP is 9 bytes, leaving 2 stranded — but all three of
+its call sites execute `LDY #$01` immediately before the JSR (and
+need Y=1 after it, which RTS preserves), so that instruction is
+folded into the helper: LSGNP becomes exactly 11 bytes, the hole is
+filled with nothing left over, and each site sheds 2 more bytes into
+the pool. The `SKIPTO &BF71` after it is now a zero-length
+build-time assertion. Pool: 1 -> 16 (9 from LSGNP's old bytes, 6
+from the three sites). The fast variant keeps the live Tube check
+and its `LDY #$01`s inline, and is bit-identical to before. LSGNP
+was the only relocatable fit: LWGET is 7 bytes, LCPYW (13) and
 LRNINI (12) do not fit, and the scanner entries are
 fall-through-coupled.
 
-**Saved: 9 bytes into the while pool** (fast variant unchanged).
+**Saved: 15 bytes into the while pool** (fast variant unchanged).
 
 **Verified** (jsbeeb, Master 128, while variant): STEST 55/0 with
 benchmarks unchanged (LSGNP sits in the real-variable store path,
@@ -1130,14 +1136,15 @@ the battery.
 | 23 | L9447 (RENUMBER) | -45 | map-free; O(refs x lines); no `RENUMBER space` |
 | 24 | block IF/ENDIF | net 0 | feature (76 bytes), funded by 23 + extractions |
 | | LBA6E, LFETN, LWGET x2, L83D5 | -31/-28 | cold-path extractions and the last unroll |
-| 25 | LSGNP -> LBF66 | -9 | while only: helper hosted in the dead Tube check |
-| | (SKIPTO pool) | +10 while / +73 fast | |
+| 25 | LSGNP -> LBF66 | -15 | while only: helper + folded LDY #$01 fill the dead Tube check exactly |
+| | (SKIPTO pool) | +16 while / +73 fast | |
 
-The while variant uses all 16384 bytes exactly, 10 of which are free
-in the SKIPTO pool; the fast variant's pool holds 73. The dead
-Tube-check stash at LBF66 is now occupied by the relocated LSGNP
-(Change 25), with 2 padding bytes to spare; in the fast variant
-LBF66 is live. The interpreter now runs at close to original 4r32 speed
+The while variant uses all 16384 bytes exactly, 16 of which are free
+in the SKIPTO pool — and that pool is fully consolidated: the dead
+Tube-check hole at LBF66 is filled to the byte by the relocated
+LSGNP with its folded LDY #$01 (Change 25), so no free byte is
+stranded in the pinned region. The fast variant's pool holds 73 and
+its LBF66 is live. The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and
 gains WHILE/ENDWHILE and block IF/ENDIF. Benchmarks (centiseconds, Master 128, suite

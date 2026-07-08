@@ -7268,11 +7268,11 @@ ENDIF
 .LA54D
         LDA     L30
         STA     (L4A)
-        LDY     #$01
 IF WHILE
         JSR     LSGNP
 
 ELSE
+        LDY     #$01
         LDA     L2E
         EOR     L31
         AND     #$80
@@ -10157,11 +10157,11 @@ ENDIF
 .LB39E
         LDA     L30
         STA     (L37)
-        LDY     #$01
 IF WHILE
         JSR     LSGNP
 
 ELSE
+        LDY     #$01
         LDA     L2E
         EOR     L31
         AND     #$80
@@ -11820,11 +11820,11 @@ ENDIF
 
         LDA     L30
         STA     (L04)
-        LDY     #$01
 IF WHILE
         JSR     LSGNP
 
 ELSE
+        LDY     #$01
         LDA     L2E
         EOR     L31
         AND     #$80
@@ -12726,9 +12726,12 @@ LBEFE = LBEFD+1
 IF WHILE
 ; The Tube-presence check is dead in this variant (its only caller
 ; went with the Change 21 service strip), so its 11 pinned bytes
-; host the sign-pack helper instead (Change 25), freeing 9 shiftable
-; bytes into the SKIPTO pool. SKIPTO pads the 2 spare bytes.
+; host the sign-pack helper instead (Change 25). With the LDY #$01
+; common to all three call sites folded in, the helper is exactly 11
+; bytes, so the hole is filled with nothing stranded; the SKIPTO is
+; now a zero-length build-time assertion.
 .LSGNP
+        LDY     #$01
         LDA     L2E
         EOR     L31
         AND     #$80
