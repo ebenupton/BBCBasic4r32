@@ -398,3 +398,41 @@ reinstating Changes 13/14.
    (dictionary may want a new entry if `ENDWHILE`/`WHILE` text repeats).
 6. Acceptance tests (§6), regression suite, README/OPTIMISATIONS.md
    updates, push.
+
+## 9. Future: multi-line IF...THEN...ELSE...ENDIF (speculation, verified against BASIC V source)
+
+BASIC V's block IF (`s/Stmt`, labels ELSEBLK/ELSE2/ENDIF) is
+**completely stateless** — no control-stack entry exists for it; it is
+pure scanning, which makes it structurally *cheaper* than WHILE was.
+Two implementation tricks worth copying:
+
+- **Line-hop scanning**: the ELSE/ENDIF search walks line HEADERS
+  using the length byte (`LDRB R0,[R2,#3]; ADD R2,R2,R0`) rather than
+  scanning every byte — faster than our WHILE scanner, and string/REM
+  content is never even looked at.
+- **Nesting via trailing THEN**: a nested block IF is detected by
+  checking whether a line *ends* with the THEN token — no parsing of
+  line contents at all. Block form itself is triggered by THEN
+  immediately before the line's CR.
+
+Sketch for BASIC IV: trigger in the IF handler (THEN then CR, ~10
+bytes — note IV does not strip trailing spaces, so skip them);
+IF-false scan hopping lines via the header length byte, counting
+lines that end in $8C, matching line-start ENDIF (a third OFF-pair,
+$87 $E7, extending LWTOK/LWLIST/keyword table) or line-start ELSE at
+depth 1 (~70 bytes); runtime line-start ELSE = dispatch hook on $8B
+(currently an error) that scans to the matching ENDIF (~15 + shared);
+ENDIF itself a no-op statement (~8). Unlike BASIC V no second ELSE
+token is needed: only statement-START ELSE reaches the dispatch hook,
+and classic single-line IF consumes mid-line ELSE internally.
+Estimated total ~150–160 bytes plus messages.
+
+Budget: does NOT fit the while variant (1 + 11 stash bytes free).
+Plausible homes: (a) the fast variant still carries the ~142-byte
+service frills — a "fast + block-IF" variant could strip them exactly
+as Change 21 did and fund this; (b) a variant with block-IF instead
+of WHILE; (c) the companion-bank design. Interactions to check at
+implementation time: WHILE-scan crossing block IFs (fine — token
+pairs are position-independent) and block-IF scan crossing WHILE
+pairs (fine — different match set); GOTO into/out of blocks behaves
+per the usual BASIC IV non-enforcement.
