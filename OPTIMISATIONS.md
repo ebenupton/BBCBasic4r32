@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 25 changes to the ROM, targeting the 65C02.
+This memo describes 26 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1003,6 +1003,49 @@ bit-identical by cmp.
 
 ---
 
+## Change 26: caller-instruction folds and call-pair wrappers
+
+**Location:** cold sites throughout; wrappers beside LFETN.
+
+The LSGNP fold generalises. A scanner over every JSR target's call
+sites (the transformation class the duplicate-sequence miner cannot
+see: its windows exclude JSR, and a 2-byte repeat can never pay for
+a fresh extraction, only for absorption into an existing callee)
+found three preamble folds and three repeated call-pairs, all in
+cold paths, all with zero runtime cost for the folds:
+
+- **DEC L0A before JSR L9332** — Sophie already provides this entry
+  as L9330; two clean sites (ON..ELSE handling, LB78B) simply
+  retarget (-4). The two other candidate sites have a branch-target
+  label between the DEC and the JSR (callers of L8C96/L8CB8 expect
+  no DEC) and are correctly left alone — a hazard the scanner cannot
+  detect, checked by source adjacency.
+- **STA L27 before JSR LB365** x3 -> new entry LST27 (STA + BRA over
+  the existing LB362 entry): -2.
+- **LDX #$39 before JSR LBD48** x3 -> new entry LPO39 (BRA over the
+  existing LBD46 = LDX #$37 entry, the pattern's precedent): -2.
+- **JSR L8D86 / JSR L8D94** x3 (assembler mnemonic matching) ->
+  tail-calling wrapper LMTCH (JSR/JMP): -3.
+- **JSR L9332 / JSR L9C6A** x3 -> wrapper LRSYN: -3 (a pair the
+  first survey missed).
+- **JSR L8F9D / CMP #$29** x4 (assembler indirect-operand close) ->
+  wrapper LSKRB: -2 (the survey's remaining assembler item).
+
+POST-position folds other than these wrappers are illusory: an RTS
+cannot fall through into a second tail, so a shared trailing
+instruction only pays as a JSR+tail wrapper at 3+ sites of 2+ bytes.
+
+**Saved: 16 bytes** (both variants; the wrappers add 12 cycles per
+use on cold paths only).
+
+**Verified** (jsbeeb, Master 128, both variants): assembler smoke
+test — all four indirect modes emit correct opcodes (B1/81/6C/B2
+through the wrapped ')' checks) and `LDA (&70,Y)` still errors
+`Index`; ON..ELSE fallthrough (the L9330 retarget); STEST 55/0 twice,
+WTEST 15/0, ITEST 16/0; benchmarks unchanged.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1137,13 +1180,14 @@ the battery.
 | 24 | block IF/ENDIF | net 0 | feature (76 bytes), funded by 23 + extractions |
 | | LBA6E, LFETN, LWGET x2, L83D5 | -31/-28 | cold-path extractions and the last unroll |
 | 25 | LSGNP -> LBF66 | -15 | while only: helper + folded LDY #$01 fill the dead Tube check exactly |
-| | (SKIPTO pool) | +16 while / +73 fast | |
+| 26 | L9330 x2, LST27, LPO39, LMTCH, LRSYN, LSKRB | -16 | preamble folds + call-pair wrappers |
+| | (SKIPTO pool) | +32 while / +89 fast | |
 
-The while variant uses all 16384 bytes exactly, 16 of which are free
+The while variant uses all 16384 bytes exactly, 32 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 73 and
+stranded in the pinned region. The fast variant's pool holds 89 and
 its LBF66 is live. The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and
@@ -1168,7 +1212,7 @@ loops): B1=318 B2=368 B3=712 B4=677.
   (STA L2B/INY/LDA/STA L2A) repeats at four sites (-11, APPLIED as
   LFETN); two cold sites can JSR the existing LWGET fetch helper
   (-6, while variant only, APPLIED); two tiny assembler
-  operand-parse pairs (-4, still unapplied). The 4x-unrolled
+  operand-parse pairs (APPLIED in Change 26 as LSKRB/LMTCH). The 4x-unrolled
   mantissa shift at L83D3 rolls into a loop (-8, ~+50 cycles per
   call in the trig argument-reduction path, APPLIED).
   Speculative at redesign risk: merging the

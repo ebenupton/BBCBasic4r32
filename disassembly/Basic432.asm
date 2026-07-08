@@ -498,8 +498,7 @@ ENDIF
         STA     L37
         JSR     LAD07
 
-        LDX     #$39
-        JSR     LBD48
+        JSR     LPO39
 
         LDX     #$03
 .L81E1
@@ -1864,8 +1863,7 @@ ENDIF
 
         JSR     LADC6
 
-        STA     L27
-        JSR     LB365
+        JSR     LST27
 
         JSR     L9338
 
@@ -2094,9 +2092,7 @@ ENDIF
 
         JSR     L9332
 
-        JSR     L8F9D
-
-        CMP     #$29
+        JSR     LSKRB
         BNE     L8BE9
 
         JSR     L8D86
@@ -2125,9 +2121,7 @@ ENDIF
 
         BNE     L8BF9
 
-        JSR     L8F9D
-
-        CMP     #$29
+        JSR     LSKRB
         BEQ     L8BB2
 
 .L8BF9
@@ -2144,9 +2138,7 @@ ENDIF
 
         BNE     L8C1B
 
-        JSR     L8D86
-
-        JSR     L8D94
+        JSR     LMTCH
 
         BEQ     L8C1B
 
@@ -2184,9 +2176,7 @@ ENDIF
 
         BNE     L8C1E
 
-        JSR     L8D86
-
-        JSR     L8D94
+        JSR     LMTCH
 
         BEQ     L8C1E
 
@@ -2304,23 +2294,17 @@ ENDIF
 
         JSR     L9332
 
-        JSR     L8F9D
-
-        CMP     #$29
+        JSR     LSKRB
         BEQ     L8CBB
 
         CMP     #$2C
         BNE     L8CE3
 
-        JSR     L8D86
-
-        JSR     L8D94
+        JSR     LMTCH
 
         BNE     L8CE3
 
-        JSR     L8F9D
-
-        CMP     #$29
+        JSR     LSKRB
         BEQ     L8CBB
 
 .L8CE3
@@ -3853,6 +3837,25 @@ ENDIF
         EQUB    $00
         EQUS    "Silly",$00
 
+; Call-pair wrappers (Change 26): three JSR pairs and one
+; JSR+compare, each repeated at 3-4 cold sites, folded into
+; tail-calling wrappers.
+.LMTCH
+        JSR     L8D86
+
+        JMP     L8D94
+
+.LRSYN
+        JSR     L9332
+
+        JMP     L9C6A
+
+.LSKRB
+        JSR     L8F9D
+
+        CMP     #$29
+        RTS
+
 ; Fetch a line-number operand: A (hi) -> L2B, next byte (lo) -> L2A.
 ; Merged from four cold sites (TRACE x2, GOTO line search, RENUMBER).
 .LFETN
@@ -4098,8 +4101,7 @@ ENDIF
         STY     L02
         STX     L03
         LDA     #$40
-        STA     L27
-        JSR     LB365
+        JSR     LST27
 
         JSR     L9338
 
@@ -4533,8 +4535,7 @@ ENDIF
 
         JSR     LAC38
 
-        STA     L27
-        JSR     LB365
+        JSR     LST27
 
 .L97EE
         TSX
@@ -4579,17 +4580,13 @@ ENDIF
         BRA     L986A
 
 .L9824
-        JSR     L9332
-
-        JSR     L9C6A
+        JSR     LRSYN
 
         LDA     #$11
         BRA     L986A
 
 .L982E
-        JSR     L9332
-
-        JSR     L9C6A
+        JSR     LRSYN
 
         JSR     LBE8B
 
@@ -4732,8 +4729,7 @@ ENDIF
         CMP     #$8B
         BEQ     L990C
 
-        DEC     L0A
-        JSR     L9332
+        JSR     L9330
 
         JSR     L990F
 
@@ -5150,8 +5146,7 @@ ENDIF
         CPX     #$2C
         BNE     L9AC1
 
-        LDX     #$39
-        JSR     LBD48
+        JSR     LPO39
 
         PLA
         STA     L38
@@ -5190,8 +5185,7 @@ ENDIF
         STA     L38
         PLA
         STA     L37
-        LDX     #$39
-        JSR     LBD48
+        JSR     LPO39
 
         LDY     L3C
         JSR     L9B97
@@ -10105,6 +10099,10 @@ ENDIF
 .LB35F
         JMP     L9155
 
+.LST27
+        STA     L27
+        BRA     LB365
+
 .LB362
         JSR     L9DFF
 
@@ -10245,9 +10243,7 @@ ENDIF
         BNE     LB3CF
 
         INC     L0A
-        JSR     L9332
-
-        JSR     L9C6A
+        JSR     LRSYN
 
         LDA     L2A
         STA     L1F
@@ -10884,8 +10880,7 @@ ENDIF
         CMP     #$85
         BEQ     LB771
 
-        DEC     L0A
-        JSR     L9332
+        JSR     L9330
 
         CPX     #$F2
         BEQ     LB7A4
@@ -12019,6 +12014,10 @@ ENDIF
         INC     L05
 .LBD45
         RTS
+
+.LPO39
+        LDX     #$39
+        BRA     LBD48
 
 .LBD46
         LDX     #$37
