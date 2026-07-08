@@ -47,7 +47,7 @@ disc: all
 	    STEST=tests/selftest.txt \
 	    WTEST=tests/whiletest.txt \
 	    ITEST=tests/iftest.txt \
-	    BSEARCH=tests/bsearch.txt
+	    BSEARCH=tests/bsearch.tok,0E00,802B
 
 clean:
 	rm -f $(ROMS)

@@ -25,9 +25,13 @@ WHILE/ENDWHILE acceptance battery: expect `PASS=15 FAIL=0`.
 (Changes 24 and 27, while variant only): expect `PASS=26 FAIL=0`.
 `bsearch.bas` (`BSEARCH`) is a demo rather than a test: a binary
 search over a sorted array using a multi-line WHILE with a nested
-block IF/ELSE/ENDIF inside the ELSE branch. `*EXEC BSEARCH` prints
-`13 found at index 6`; change line 30 to a key not in the array
-(e.g. 14) for the `not found` branch. Note that
+block IF/ELSE/ENDIF inside the ELSE branch. On the disc it is a
+tokenised BASIC program (`bsearch.tok`, produced by the WHILE-variant
+ROM's own tokeniser, since the two-byte WHILE/ENDIF tokens exist in
+no other tokeniser): `CHAIN "BSEARCH"` prints `13 found at index 6`;
+change line 30 to a key not in the array (e.g. 14) for the
+`not found` branch. It LOADs and LISTs only under the WHILE-variant
+ROM. Note that
 WHILE programs must be entered through the ROM's own tokeniser
 (typed, `*EXEC`, or LOAD of a ROM-tokenised file) — host-side
 tokenisers such as jsbeeb's `load_basic` do not know the new tokens.
