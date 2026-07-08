@@ -401,6 +401,15 @@ reinstating Changes 13/14.
 
 ## 9. Future: multi-line IF...THEN...ELSE...ENDIF (speculation, verified against BASIC V source)
 
+> **Status (July 2026): implemented in reduced form as Change 24** —
+> an ELSE-less nested block IF...THEN/ENDIF (ENDIF = $87 $E1), fitted
+> into the while variant by the map-free RENUMBER (Change 23) and the
+> cold-path extractions, with the forward scanner UNIFIED with the
+> WHILE scanner (mode byte in L2D) rather than duplicated. ELSE —
+> roughly half the cost estimated below — remains future work, and
+> the syntax is forward-compatible with adding it. See
+> OPTIMISATIONS.md Change 24.
+
 BASIC V's block IF (`s/Stmt`, labels ELSEBLK/ELSE2/ENDIF) is
 **completely stateless** — no control-stack entry exists for it; it is
 pure scanning, which makes it structurally *cheaper* than WHILE was.

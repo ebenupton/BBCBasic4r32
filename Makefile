@@ -2,7 +2,7 @@
 # from the single conditional source disassembly/Basic432.asm:
 #
 #   Basic432_fast.bin   - speed features (Changes 11/13/14/19/20), no WHILE
-#   Basic432_while.bin  - WHILE/ENDWHILE (Change 21), speed features reverted
+#   Basic432_while.bin  - WHILE/ENDWHILE (21) + block IF/ENDIF (24), speed features reverted
 #
 # The variants are mutually exclusive: the 16K image cannot hold both.
 # Requires beebasm >= 1.10 (for -D); override with BEEBASM=/path/to/beebasm.
@@ -45,7 +45,8 @@ disc: all
 	    WHILE=$(DIS)/Basic432_while.bin,8000,8000 \
 	    FAST=$(DIS)/Basic432_fast.bin,8000,8000 \
 	    STEST=tests/selftest.txt \
-	    WTEST=tests/whiletest.txt
+	    WTEST=tests/whiletest.txt \
+	    ITEST=tests/iftest.txt
 
 clean:
 	rm -f $(ROMS)

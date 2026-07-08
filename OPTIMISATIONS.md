@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 21 changes to the ROM, targeting the 65C02.
+This memo describes 24 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -853,6 +853,124 @@ stands unchanged.
 
 ---
 
+## Change 23: map-free RENUMBER
+
+**Location:** L9447 region (both variants).
+
+**Rationale:** the July 2026 licence — RENUMBER may get slower to buy
+bytes. The original is map-based: pass 1 copies every old line number
+into a workspace table above the program (bounds-checked against the
+BASIC stack, failing with `RENUMBER space`), pass 2 rewrites the
+headers with start, start+step, ..., and pass 3 resolves each $8D
+reference by walking the map and the renumbered program in lockstep.
+The map exists only because the headers are rewritten before the
+references are patched — so the passes are inverted. References are
+patched FIRST, while the headers still hold their old numbers: each
+$8D target is resolved by walking the program from the top and
+accumulating `new = start (+ step per line)` until the header matches
+— the walk is the multiply. The map, its builder, its bounds check
+and the `RENUMBER space` error are deleted entirely (that failure
+mode is now structurally impossible — a small user-visible
+improvement, not just a wash). Start survives both passes in L3B/L3C
+(popped there directly by LBD48), the per-reference accumulator runs
+in L39/L3A and is consumed into the L8E1F patch call just before
+those bytes are reused as the patch pointer, and step is stashed in
+L2D because L9BEE decodes each target into L2A/L2B. The
+accumulate-and-advance tail (LRNSTP, ending in a tail call to L953D,
+which needs Y=1 and carry clear — both invariants hold) and the
+cursor/accumulator init (LRNINI) are shared between the reference
+search and the header-rewrite pass.
+
+**Cost:** O(refs x lines) instead of O(refs + lines) — a 500-line
+program with 300 references renumbers in a second or two instead of
+instantly. One behaviour delta: `Failed at` now reports the
+referencing line's *old* number (references are patched before
+renumbering); the unresolved reference is still left intact and
+RENUMBER still continues.
+
+**Saved: 45 bytes** (both variants).
+
+**Verified** (jsbeeb, Master 128, both variants): GOTO/GOSUB/RESTORE
+and all three ON..GOTO operands retargeted across a RENUMBER 100,25;
+`GOTO 40` inside a string and a REM left untouched; `Failed at 60`
+for a dangling GOTO 999, which survives unpatched; RENUMBER
+round-trip back to 10,10; `Silly` for RENUMBER 10,0.
+
+---
+
+## Change 24: ELSE-less block IF...THEN / ENDIF (while variant)
+
+**Location:** keyword table (after ENDWHILE), LWTOK, the scanner
+(replacing LWS1/LWS2/LWEOL/LWNOE), L9D0C (IF false path), LWLIST.
+
+`IF <expr> THEN` as the last thing on a line now opens a multi-line
+block closed by `ENDIF`, with full nesting — BASIC V's block IF minus
+the ELSE clause (a strict subset: anything written for it behaves
+identically under BASIC V, and ELSE can be grafted on later without
+syntax changes if bytes ever appear; roughly half the full block-IF
+cost was ELSE). A block ELSE fails noisily: the true path executes it
+at statement position, which is `Mistake`.
+
+**Tokens.** ENDIF = $87 $E1 ("OFF ENDPROC"), the third OFF-prefix
+pair. $E1 is ENDPROC's token, whose keyword entry precedes the new
+ENDIF entry, so LBD77 first-match detokenisation is unaffected. The
+entry sits between ENDWHILE and END ("END." still means ENDPROC,
+"ENDI." means ENDIF) and directly after ENDWHILE's, so LWLIST prints
+it from LWTXTE+10 with the same loop. There is no WHILE-style open
+token: the open pattern is `THEN` as the last byte of a line — the
+byte pair $8C,$0D, which like $87-pairs cannot occur inside strings
+(they cannot hold $0D), REMs/DATA (not tokenised), or $8D triples
+(all operand bytes have bit 6 set).
+
+**Runtime.** The true path costs nothing: `IF x THEN` at end of line
+already falls through to the next line, and an executed ENDIF is a
+two-instruction no-op case in LWTOK's second-byte switch (`JMP
+L90C7`, shared with the scanner exit). There is no state — nesting is
+resolved purely by the scanner, so a stray ENDIF is a harmless no-op
+(where a stray ENDWHILE, which must consult the REPEAT stack, reports
+`No REPEAT`). The false path hooks L9D0C, where the ELSE scan has
+just hit end-of-line with Y on the $0D: if the previous byte is $8C
+the line ends in THEN — exactly the scanner's open pattern — and the
+scanner is entered with the pointer on that $0D. The scanner itself
+is the WHILE scanner, unified rather than duplicated: L2D holds the
+close pair's second byte ($DC or $E1) and doubles as the mode flag —
+$DC is even and $E1 odd, so one LSR distinguishes the modes for the
+open-pattern checks and for choosing between the `No ENDWHILE` (46)
+and `No ENDIF` (47) errors. Each construct counts only its own
+open/close pairs (correct for well-formed code, and what BASIC V's
+scanners do); every non-matching second byte is re-dispatched, so
+constructs like `...THEN ENDIF` still scan correctly. Per-line
+Escape checks and end-of-program detection are inherited unchanged.
+
+**Funding** (measured, from a starting pool of 1): Change 23 (+45),
+the LBA6E pointer copy — a byte-order permutation of LCPYW — replaced
+by a JSR (+9, cold PRINT#/INPUT# path), a shared LFETN helper for the
+four-site line-number operand fetch `STA L2B / INY / LDA (L0B),Y /
+STA L2A` (+11: two TRACE sites, RENUMBER's Failed-at, and the GOTO
+line-search entry LB454 — +12 cycles per GOTO against its
+hundreds-of-cycles search), two assembler-region fetches re-pointed
+at the existing LWGET helper (+6, while variant only: the assembler
+listing loop and the L8D44 label parser), and the ROM's only
+remaining unrolled loop — the 4x mantissa shift at L83D5 (trig
+argument reduction) — rolled up with the saved pre-shift L0D pushed
+through the existing PHA/PLA nest (+8, ~+50 cycles per call). Spent:
+76 bytes of feature. The pool holds 1 byte again in the while
+variant; the fast variant banks 73.
+
+**Verified** (jsbeeb, Master 128): 16-case battery `tests/iftest.bas`
+(ITEST on the disc) — false/true blocks, nesting to depth 3 in both
+truth patterns, string/REM decoys, single-line IF/ELSE and
+IF..THEN <line> unaffected, `THEN:` stays single-line both ways,
+WHILE inside a skipped block and block-IF inside a skipped WHILE
+(independent counting), TRACE OFF at end of line in a skipped block,
+stray ENDIF, `ENDI.` abbreviation, `No ENDIF` = ERR 47 — 16/0; LIST
+round-trip of the nested blocks; plus full regression on both
+variants (STEST 55/0 twice, WTEST 15/0) with benchmarks unchanged
+(while: B1=318 B2=368 B3=712 B4=677; fast: 266/335/710/653 vs the
+documented 267/336/708/653 — timer jitter).
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -983,10 +1101,13 @@ the battery.
 | 20 | LMSGX rot., LCPYW | -7 | LA2DD part reverted |
 | 21 | WHILE/ENDWHILE | net 0 | feature, funded as described |
 | 22 | LA8CC | 0 | LN/ATN carry-bug fix (both variants) |
-| | (SKIPTO pool) | +1 | |
+| 23 | L9447 (RENUMBER) | -45 | map-free; O(refs x lines); no `RENUMBER space` |
+| 24 | block IF/ENDIF | net 0 | feature (76 bytes), funded by 23 + extractions |
+| | LBA6E, LFETN, LWGET x2, L83D5 | -31/-28 | cold-path extractions and the last unroll |
+| | (SKIPTO pool) | +1 while / +73 fast | |
 
-The ROM uses all 16384 bytes exactly, 1 of which is free in the
-SKIPTO pool. In the while variant a further 11 bytes are available as
+The while variant uses all 16384 bytes exactly, 1 of which is free in
+the SKIPTO pool; the fast variant's pool holds 73. In the while variant a further 11 bytes are available as
 a fixed-address stash: the Tube-presence check LBF66 ($BF66-$BF70,
 pinned region) is dead there — its only caller went with the service
 strip — but cannot be reclaimed into the pool because nothing in the
@@ -994,7 +1115,7 @@ pinned region can shift; future code content of up to 11 bytes could
 be placed over it instead. In the fast variant LBF66 is live. The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and
-gains WHILE/ENDWHILE. Benchmarks (centiseconds, Master 128, suite
+gains WHILE/ENDWHILE and block IF/ENDIF. Benchmarks (centiseconds, Master 128, suite
 loops): B1=318 B2=368 B3=712 B4=677.
 
 ## Rejected / future candidates
@@ -1011,14 +1132,14 @@ loops): B1=318 B2=368 B3=712 B4=677.
   assembler, licensed to get slower):** mechanical duplication in
   these regions is nearly absent; the confirmed extractions total
   only ~27-35 bytes: LBA6E's pointer copy is identical to LCPYW
-  (-9); the 2-byte line-number operand fetch (STA L2B/INY/LDA/STA
-  L2A) repeats at four GOTO-class/AUTO/LIST sites (-8, +12 cycles per
-  GOTO against its hundreds-cycle line search); two cold sites can
-  JSR the existing LWGET fetch helper (-6, while variant only); two
-  tiny assembler operand-parse pairs (-4). Adjacent but only
-  borderline-licensed: the 4x-unrolled mantissa shift at L83D3 rolls
-  into a loop (-8, ~+30 cycles per call, callers are in the trig
-  argument-reduction path). Speculative at redesign risk: merging the
+  (-9, APPLIED in Change 24); the 2-byte line-number operand fetch
+  (STA L2B/INY/LDA/STA L2A) repeats at four sites (-11, APPLIED as
+  LFETN); two cold sites can JSR the existing LWGET fetch helper
+  (-6, while variant only, APPLIED); two tiny assembler
+  operand-parse pairs (-4, still unapplied). The 4x-unrolled
+  mantissa shift at L83D3 rolls into a loop (-8, ~+50 cycles per
+  call in the trig argument-reduction path, APPLIED).
+  Speculative at redesign risk: merging the
   assembler OPT-listing token printer with LIST's loop (~-15-20).
   Rejected: variable-length keyword-table flags (no spare marker bit
   - token bytes use the full $80-$FF range). Conclusion: even fully
@@ -1031,7 +1152,7 @@ loops): B1=318 B2=368 B3=712 B4=677.
   L83D3 (trig path, -8 if rolled) and a 3-byte descriptor copy at
   LBCEA (warm string/stack path, -5, not licensed) — Sophie already
   loops everything cold. The one genuine algorithmic find is
-  **RENUMBER map elimination (~-45)**: RENUMBER currently builds a
+  **RENUMBER map elimination (~-45, APPLIED as Change 23)**: RENUMBER currently builds a
   table of every old line number below the string area (pass 1,
   ~42 bytes incl. the `RENUMBER space` error), rewrites the headers,
   then resolves each $8D reference by walking the map and the

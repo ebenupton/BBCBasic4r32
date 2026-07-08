@@ -889,21 +889,19 @@ ENDIF
         STA     L11
         ROR     A
         PHA
+        LDA     L0D
+        PHA
         LDA     L0E
-        LDX     L0D
+        LDX     #$04
+.L83DE
         LSR     L0F
         ROR     A
         ROR     L0D
-        LSR     L0F
-        ROR     A
-        ROR     L0D
-        LSR     L0F
-        ROR     A
-        ROR     L0D
-        LSR     L0F
-        ROR     A
-        ROR     L0D
+        DEX
+        BNE     L83DE
+
         EOR     L10
+        PLX
         STX     L0F
         LDX     L0E
         STX     L10
@@ -1222,6 +1220,10 @@ IF WHILE
         EQUS    "ENDWHILE"
 
         EQUB    $DC,$81
+
+        EQUS    "ENDIF"
+
+        EQUB    $E1,$81
 
 ENDIF
         EQUS    "END"
@@ -1888,9 +1890,13 @@ ENDIF
         DEC     L0A
         LDX     #$03
 .L8AC3
+IF WHILE
+        JSR     LWGET
+ELSE
         LDY     L0A
         INC     L0A
         LDA     (L0B),Y
+ENDIF
         BMI     L8AF5
 
         CMP     #$20
@@ -2394,9 +2400,13 @@ ENDIF
 
 .L8D44
         LDX     #$01
+IF WHILE
+        JSR     LWGET
+ELSE
         LDY     L0A
         INC     L0A
         LDA     (L0B),Y
+ENDIF
         AND     #$DF
         CMP     #$42
         BEQ     L8D64
@@ -3106,10 +3116,8 @@ ENDIF
         LDX     L20
         BEQ     L90A0
 
-        STA     L2B
-        INY
-        LDA     (L0B),Y
-        STA     L2A
+        JSR     LFETN
+
         JSR     L9D0F
 
 .L90A0
@@ -3833,11 +3841,6 @@ ENDIF
 .L9433
         JMP     L9C74
 
-.L9436
-        LDA     L12
-        STA     L3B
-        LDA     L13
-        STA     L3C
 .L943E
         LDA     L18
         STA     L38
@@ -3845,84 +3848,43 @@ ENDIF
         STY     L37
         RTS
 
-.L9447
-        JSR     L9410
-
-        LDX     #$39
-        JSR     LBD48
-
-        JSR     LBE25
-
-        JSR     L9436
-
-.L9455
-        LDA     (L37)
-        BMI     L9487
-
-        STA     (L3B)
-        LDA     (L37),Y
-        STA     (L3B),Y
-        SEC
-        TYA
-        ADC     L3B
-        STA     L3B
-        BCC     L9469
-
-        INC     L3C
-.L9469
-        CMP     L06
-        LDA     L3C
-        SBC     L07
-        BCS     L9476
-
-        JSR     L953D
-
-        BRA     L9455
-
-.L9476
-        BRK
-        EQUB    $00
-        EQUS    $CC,$11
-
-
 .L947F
         BRK
         EQUB    $00
         EQUS    "Silly",$00
 
+; Fetch a line-number operand: A (hi) -> L2B, next byte (lo) -> L2A.
+; Merged from four cold sites (TRACE x2, GOTO line search, RENUMBER).
+.LFETN
+        STA     L2B
+        INY
+        LDA     (L0B),Y
+        STA     L2A
+        RTS
 
+; RENUMBER (Change 23: map-free). References are patched FIRST, while
+; the headers still hold the old numbers: each $8D target is resolved
+; by walking the program from the top accumulating start+step per
+; line - the walk is the multiply - so the old-number map (and with
+; it the 'RENUMBER space' error) is gone entirely, trading
+; O(refs x lines) time for ~50 bytes. Headers are rewritten after.
+; Step is stashed in L2D (L9BEE reuses L2A/L2B for each target);
+; start is popped to L3B/L3C and survives both passes.
+.L9447
+        JSR     L9410
 
-.L9487
-        JSR     L943E
+        LDA     L2A
+        STA     L2D
+        LDX     #$3B
+        JSR     LBD48
 
-.L948A
-        LDA     (L37)
-        BMI     L94AA
-
-        LDA     L3A
-        STA     (L37)
-        LDA     L39
-        STA     (L37),Y
-        CLC
-        LDA     L39
-        ADC     L2A
-        STA     L39
-        LDA     #$00
-        ADC     L3A
-        AND     #$7F
-        STA     L3A
-        JSR     L953D
-
-        BRA     L948A
-
-.L94AA
         LDA     L18
         STA     L0C
         STZ     L0B
 .L94B0
         LDY     #$01
         LDA     (L0B),Y
-        BMI     L951D
+        BMI     LRNHDR
 
         LDY     #$04
         STZ     L2C
@@ -3958,24 +3920,22 @@ ENDIF
 .L94DE
         JSR     L9BEE
 
-        JSR     L9436
+        JSR     LRNINI
 
 .L94E4
         LDA     (L37)
         BMI     L951F
 
-        LDA     (L3B)
         CMP     L2B
         BNE     L950D
 
-        LDA     (L3B),Y
+        LDA     (L37),Y
         CMP     L2A
         BNE     L950D
 
-        LDA     (L37),Y
+        LDA     L39
         STA     L3D
-        LDA     (L37)
-        TAX
+        LDX     L3A
         LDY     L0A
         DEY
         LDA     L0B
@@ -3989,19 +3949,52 @@ ENDIF
         BRA     L94BA
 
 .L950D
-        CLC
-        JSR     L953D
+        JSR     LRNSTP
 
-        LDA     L3B
-        ADC     #$02
-        STA     L3B
-        BCC     L94E4
-
-        INC     L3C
         BRA     L94E4
 
-.L951D
-        BRA     L9579
+; pass 2: rewrite the line headers with start, start+step, ...
+.LRNHDR
+        JSR     LRNINI
+
+.L948A
+        LDA     (L37)
+        BMI     LRNEND
+
+        LDA     L3A
+        STA     (L37)
+        LDA     L39
+        STA     (L37),Y
+        JSR     LRNSTP
+
+        BRA     L948A
+
+.LRNEND
+        JMP     L9579
+
+; cursor to the first line; accumulator (L39/L3A) = start
+.LRNINI
+        JSR     L943E
+
+        LDA     L3B
+        STA     L39
+        LDA     L3C
+        STA     L3A
+        RTS
+
+; accumulator += step, advance (L37) to the next line (tail call:
+; L953D needs Y=1 and carry clear, both true here)
+.LRNSTP
+        CLC
+        LDA     L39
+        ADC     L2D
+        STA     L39
+        LDA     L3A
+        ADC     #$00
+        AND     #$7F
+        STA     L3A
+        JMP     L953D
+
 
 .L951F
         JSR     LBF0F
@@ -4009,10 +4002,8 @@ ENDIF
         EQUS    "Failed at "
 
         LDA     (L0B),Y
-        STA     L2B
-        INY
-        LDA     (L0B),Y
-        STA     L2A
+        JSR     LFETN
+
         JSR     LA0E8
 
         JSR     LBAC2
@@ -5499,10 +5490,8 @@ ENDIF
         LDX     L20
         BEQ     L9CB6
 
-        STA     L2B
-        INY
-        LDA     (L0B),Y
-        STA     L2A
+        JSR     LFETN
+
         JSR     L9D0F
 
 .L9CB6
@@ -5573,6 +5562,18 @@ ENDIF
         BEQ     L9CED
 
 .L9D0C
+IF WHILE
+        DEY
+        LDA     (L0B),Y
+        INY
+        CMP     #$8C
+        BNE     L9D0E
+
+        STY     L0A
+        JMP     LWISC
+
+.L9D0E
+ENDIF
         JMP     L907D
 
 .L9D0F
@@ -10288,10 +10289,8 @@ ENDIF
 
 .LB454
         LDA     (L0B),Y
-        STA     L2B
-        INY
-        LDA     (L0B),Y
-        STA     L2A
+        JSR     LFETN
+
 .LB45D
         LDA     L2A
         CLC
@@ -11472,12 +11471,8 @@ ENDIF
 .LBA6C
         DEC     L0A
 .LBA6E
-        LDA     L0A
-        STA     L1B
-        LDA     L0B
-        STA     L19
-        LDA     L0C
-        STA     L1A
+        JSR     LCPYW
+
 .LBA7A
         JSR     L8F92
 
@@ -12384,6 +12379,9 @@ IF WHILE
         CMP     #$DC
         BEQ     LWENDW
 
+        CMP     #$E1
+        BEQ     LWFIN
+
         JMP     L9C24
 
 ; WHILE: push the condition pointer (current position), evaluate.
@@ -12397,36 +12395,46 @@ IF WHILE
         BNE     LWCONT
 
         DEC     L24
+; Unified forward scanner (WHILE and block-IF, Change 24). L2D holds
+; the close pair's second byte ($DC = ENDWHILE, $E1 = ENDIF) and
+; selects which open pattern is counted: $87,$E3 WHILE pairs, or for
+; block-IF a THEN as the last byte of a line ($8C,$0D - a pair that
+; cannot occur inside strings, which cannot hold $0D, nor inside $8D
+; triples, whose bytes all have bit 6 set). X is the nesting depth.
+; L2D parity distinguishes the modes ($DC even, $E1 odd).
+.LWWSC
+        LDA     #$DC
+        STA     L2D
+        BRA     LWSX
+
+.LWISC
+        LDA     #$E1
+        STA     L2D
+.LWSX
         LDX     #$01
 .LWS1
         JSR     LWGET
 
+.LWS1D
         CMP     #$0D
         BEQ     LWEOL
 
         CMP     #$87
+        BEQ     LWS87
+
+        CMP     #$8C
         BNE     LWS1
+
+        LDA     L2D
+        LSR     A
+        BCC     LWS1
 
         JSR     LWGET
 
         CMP     #$0D
-        BEQ     LWEOL
-
-        CMP     #$E3
-        BNE     LWS2
+        BNE     LWS1D
 
         INX
-        BRA     LWS1
-
-.LWS2
-        CMP     #$DC
-        BNE     LWS1
-
-        DEX
-        BNE     LWS1
-
-        JMP     L90C7
-
 .LWEOL
         LDY     L0A
         LDA     (L0B),Y
@@ -12438,11 +12446,31 @@ IF WHILE
 
         BRA     LWS1
 
-.LWNOE
-        BRK
-        EQUB    $2E
+.LWS87
+        JSR     LWGET
 
-        EQUS    $0F,"ENDWHILE",$00
+        CMP     #$0D
+        BEQ     LWEOL
+
+        CMP     L2D
+        BNE     LWS2
+
+        DEX
+        BNE     LWS1
+
+.LWFIN
+        JMP     L90C7
+
+.LWS2
+        CMP     #$E3
+        BNE     LWS1D
+
+        LDA     L2D
+        LSR     A
+        BCS     LWS1
+
+        INX
+        BRA     LWS1
 
 ; ENDWHILE: re-evaluate the condition saved by the matching WHILE.
 ; TRUE: continue at the block start (where the pointer now is).
@@ -12486,6 +12514,22 @@ IF WHILE
 .LWNOW
         JMP     LBA2B
 
+.LWNOE
+        LDA     L2D
+        LSR     A
+        BCS     LWNOI
+
+        BRK
+        EQUB    $2E
+
+        EQUS    $0F,"ENDWHILE",$00
+
+.LWNOI
+        BRK
+        EQUB    $2F
+
+        EQUS    $0F,"ENDIF",$00
+
 ; LIST decoder for the $87 pairs: prints WHILE/ENDWHILE from the
 ; ENDWHILE table entry text (WHILE is its suffix at offset 3).
 ; Anything else after $87 is a genuine OFF.
@@ -12498,6 +12542,10 @@ IF WHILE
 
         LDX     #$00
         CMP     #$DC
+        BEQ     LWLP
+
+        LDX     #$0A
+        CMP     #$E1
         BEQ     LWLP
 
         DEY

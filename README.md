@@ -83,7 +83,9 @@ Two ready-to-use 16K ROM images built from `disassembly/Basic432.asm`
 for how they are built and verified):
 
 - `roms/Basic432_fast.rom` — the speed-optimised variant
-- `roms/Basic432_while.rom` — the WHILE/ENDWHILE variant
+- `roms/Basic432_while.rom` — the WHILE/ENDWHILE variant, which since
+  Change 24 also has BASIC V-style (ELSE-less) block `IF <expr> THEN`
+  ... `ENDIF` with full nesting
 
 Both require a 65C02. `tests/README.md` has a recipe for running them
 under jsbeeb's Master 128.

@@ -12,15 +12,17 @@ formatting, and ON ERROR/ERR. It finishes with four TIME-based
 benchmark loops (bare NEXT, integer increment, STR$ + string store,
 REPEAT/UNTIL) and a `PASS=nn FAIL=nn` summary.
 
-Expected result: `PASS=52 FAIL=0`, with `LN1000=6.90775639`,
-`LNB=3.07692308E-2`, `ATNB=0.753140099` (the ROM's documented
-pre-existing values, not the mathematically correct ones). Benchmark
-expectations (centiseconds, Master 128) for the Change 21 ROM:
-B1=318 B2=368 B3=712 B4=677 (the speed features were reverted to
-fund WHILE/ENDWHILE; see OPTIMISATIONS.md).
+Expected result: `PASS=55 FAIL=0` on both variants (the LN1000,
+LNFIX and ATNFIX checks assert the mathematically correct values,
+which the ROM produces since the Change 22 LN/ATN carry-bug fix).
+Benchmark expectations (centiseconds, Master 128): WHILE variant
+B1=318 B2=368 B3=712 B4=677, FAST variant B1=267 B2=336 B3=708
+B4=653 (a couple of centiseconds of timer jitter is normal).
 
 `whiletest.bas` (on the disc as `WTEST`, also `*EXEC`-able) is the
-WHILE/ENDWHILE acceptance battery: expect `PASS=15 FAIL=0`. Note that
+WHILE/ENDWHILE acceptance battery: expect `PASS=15 FAIL=0`.
+`iftest.bas` (`ITEST`) is the block IF...THEN/ENDIF battery
+(Change 24, while variant only): expect `PASS=16 FAIL=0`. Note that
 WHILE programs must be entered through the ROM's own tokeniser
 (typed, `*EXEC`, or LOAD of a ROM-tokenised file) — host-side
 tokenisers such as jsbeeb's `load_basic` do not know the new tokens.
@@ -59,8 +61,16 @@ is the speed-features variant.
    assert the CORRECT values, since Change 22 fixed the LN/ATN carry
    bug); benchmarks (centiseconds): WHILE variant B1=318 B2=368
    B3=712 B4=677, FAST variant B1=267 B2=336 B3=708 B4=653. On the
-   WHILE variant, `*EXEC WTEST` runs the WHILE/ENDWHILE battery:
-   expect `PASS=15 FAIL=0`.
+   WHILE variant, `*EXEC WTEST` runs the WHILE/ENDWHILE battery
+   (expect `PASS=15 FAIL=0`) and `*EXEC ITEST` the block
+   IF...THEN/ENDIF battery of Change 24 (expect `PASS=16 FAIL=0`).
+   Type `NEW` between `*EXEC` runs — `*EXEC` merges over the resident
+   program, and leftover lines from a previous suite wreck the next
+   one in confusing ways.
+5. RENUMBER is map-free since Change 23 (O(refs x lines), no
+   `RENUMBER space` error, `Failed at` reports the referencing
+   line's old number). Spot-check: type a few GOTO/GOSUB lines,
+   RENUMBER 100,25, LIST.
 
 Why the poke: MOS 3.20 builds its ROM-type table at &02A1+bank at
 reset, with the empty sideways-RAM banks unplugged, so a freshly
