@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 24 changes to the ROM, targeting the 65C02.
+This memo describes 25 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -971,6 +971,32 @@ documented 267/336/708/653 — timer jitter).
 
 ---
 
+## Change 25: host LSGNP in the dead Tube check (while variant)
+
+**Location:** LBF66 (pinned tail) / the Change 21 runtime block.
+
+The 11 pinned bytes of the Tube-presence check LBF66 ($BF66-$BF70)
+are dead in the while variant — their only caller went with the
+Change 21 service strip — but can never flow into the SKIPTO pool,
+because nothing in the pinned region can shift. They can, however,
+host relocated code: the 9-byte sign-pack helper LSGNP (standalone,
+RTS-terminated, JSR-only callers) moves there under `IF WHILE`, a
+`SKIPTO &BF71` pads the 2 spare bytes, and its old 9 shiftable bytes
+flow into the pool, which grows from 1 to 10. The fast variant keeps
+the live Tube check and is bit-identical to before. LSGNP was the
+only relocatable fit: LWGET is 7 bytes (worse), LCPYW (13) and
+LRNINI (12) do not fit, and the scanner entries are
+fall-through-coupled.
+
+**Saved: 9 bytes into the while pool** (fast variant unchanged).
+
+**Verified** (jsbeeb, Master 128, while variant): STEST 55/0 with
+benchmarks unchanged (LSGNP sits in the real-variable store path,
+exercised heavily), WTEST 15/0, ITEST 16/0; fast image verified
+bit-identical by cmp.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1104,15 +1130,14 @@ the battery.
 | 23 | L9447 (RENUMBER) | -45 | map-free; O(refs x lines); no `RENUMBER space` |
 | 24 | block IF/ENDIF | net 0 | feature (76 bytes), funded by 23 + extractions |
 | | LBA6E, LFETN, LWGET x2, L83D5 | -31/-28 | cold-path extractions and the last unroll |
-| | (SKIPTO pool) | +1 while / +73 fast | |
+| 25 | LSGNP -> LBF66 | -9 | while only: helper hosted in the dead Tube check |
+| | (SKIPTO pool) | +10 while / +73 fast | |
 
-The while variant uses all 16384 bytes exactly, 1 of which is free in
-the SKIPTO pool; the fast variant's pool holds 73. In the while variant a further 11 bytes are available as
-a fixed-address stash: the Tube-presence check LBF66 ($BF66-$BF70,
-pinned region) is dead there — its only caller went with the service
-strip — but cannot be reclaimed into the pool because nothing in the
-pinned region can shift; future code content of up to 11 bytes could
-be placed over it instead. In the fast variant LBF66 is live. The interpreter now runs at close to original 4r32 speed
+The while variant uses all 16384 bytes exactly, 10 of which are free
+in the SKIPTO pool; the fast variant's pool holds 73. The dead
+Tube-check stash at LBF66 is now occupied by the relocated LSGNP
+(Change 25), with 2 padding bytes to spare; in the fast variant
+LBF66 is live. The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and
 gains WHILE/ENDWHILE and block IF/ENDIF. Benchmarks (centiseconds, Master 128, suite

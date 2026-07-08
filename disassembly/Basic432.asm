@@ -12362,14 +12362,6 @@ IF WHILE
         LDA     (L0B),Y
         RTS
 
-; Sign-pack helper (merged from three float-store sites).
-.LSGNP
-        LDA     L2E
-        EOR     L31
-        AND     #$80
-        EOR     L31
-        RTS
-
 .LWTOK
         JSR     LWGET
 
@@ -12731,6 +12723,20 @@ LBEFE = LBEFD+1
         LDY     #$06
         JMP     OSCLI
 
+IF WHILE
+; The Tube-presence check is dead in this variant (its only caller
+; went with the Change 21 service strip), so its 11 pinned bytes
+; host the sign-pack helper instead (Change 25), freeing 9 shiftable
+; bytes into the SKIPTO pool. SKIPTO pads the 2 spare bytes.
+.LSGNP
+        LDA     L2E
+        EOR     L31
+        AND     #$80
+        EOR     L31
+        RTS
+
+        SKIPTO  &BF71
+ELSE
 .LBF66
         LDA     #$EA
         LDX     #$00
@@ -12740,6 +12746,7 @@ LBEFE = LBEFD+1
         TXA
         RTS
 
+ENDIF
 .LBF71
         EQUB    $52
 
