@@ -824,6 +824,35 @@ penalty ~32→~8 cycles vs the 468 pre-Change-19 baseline);
 
 ---
 
+## Change 22: fix the LN/ATN table-index carry bug
+
+**Location:** LA8CC (asm line ~7965), common to both variants.
+
+**Rationale:** the long-documented 4r32 accuracy bug (see the README
+and disassembly/examples/ln_1000/): the coefficient-table index was
+computed as `CLC / loop: ADC #$0A / ADC #$F1`, losing a carry when a
+partial sum crossed $FF, so table entries near the end of page $BF
+produced wrong LN and ATN results (ASN/ACS inherit via ATN). The fix
+is the byte-neutral reordering demonstrated in the README:
+`CLC / ADC #$F0 / loop: ADC #$0A` — the bias addition carries for
+this table's start values, supplying the +1 that the final `ADC #$F1`
+used to add. Exactly 6 bytes change in each variant, at the same
+instruction site.
+
+**Verified** (both variants, jsbeeb Master 128): LN(1000)=6.90775528,
+LN(1.03125)=3.07716587E-2, ATN(0.9375)=0.753151281,
+ASN(0.03125)=3.12550885E-2, ACS(0.03125)=1.53954124 — all matching
+the true values to the ROM's precision. The self-test suite now
+asserts these three (PASS=55 on both variants); regression and
+benchmarks unchanged.
+
+Note on the pinned tail: the fixed code has the mirror sensitivity
+(it would lose the +1 for table entries near the *start* of a page),
+which the current pinned layout avoids — so the SKIPTO discipline
+stands unchanged.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -953,6 +982,7 @@ the battery.
 | 19 | LNUMF | reverted | was +43, ~72/single-digit literal |
 | 20 | LMSGX rot., LCPYW | -7 | LA2DD part reverted |
 | 21 | WHILE/ENDWHILE | net 0 | feature, funded as described |
+| 22 | LA8CC | 0 | LN/ATN carry-bug fix (both variants) |
 | | (SKIPTO pool) | +1 | |
 
 The ROM uses all 16384 bytes exactly, 1 of which is free in the

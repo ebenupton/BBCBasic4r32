@@ -7963,12 +7963,18 @@ ENDIF
         TXA
         INY
         CLC
+; Change 22: fix the LN/ATN (and hence ASN/ACS) table-index carry
+; bug. The original added $0A per step and $F1 at the end, losing the
+; carry when a partial sum crossed $FF (entries near the end of the
+; page): adding the $F0 bias first keeps every partial sum in range
+; for this table layout. Same size (8 bytes); see the README and
+; disassembly/examples/ln_1000/notes.txt for the full analysis.
+        ADC     #$F0
 .LA8CD
         ADC     #$0A
         DEY
         BPL     LA8CD
 
-        ADC     #$F1
         STA     L4C
         LDA     #LO(LBFBE)
         JSR     LA631

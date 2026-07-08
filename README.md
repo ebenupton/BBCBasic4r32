@@ -16,8 +16,13 @@ P.ATN(0.9375)  | 0.753140099   | 0.753151281
 [Here's a c program](https://github.com/hoglet67/BBCBasic4r32/blob/master/c/log_test.c)
 implementing the same algorithms as the Basic.
 
-We were able to understand the bug and fix it. You can patch BBC Basic located at &8000
-with a program like this:
+We were able to understand the bug and fix it. **As of Change 22 the
+fix is applied in the ROM source, so both pre-built variants in
+`roms/` return the correct values** (verified: LN(1000)=6.90775528,
+LN(1.03125)=3.07716587E-2, ATN(0.9375)=0.753151281,
+ASN(0.03125)=3.12550885E-2, ACS(0.03125)=1.53954124). For reference,
+the original RAM-patch demonstration against an unmodified ROM at
+&8000 was:
 ```
    10  T=1.03125
    20  REPORT

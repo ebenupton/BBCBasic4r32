@@ -2,8 +2,8 @@
 
 `selftest.bas` is a self-checking BASIC program distilled from
 `../bbc_basic_test_plan.md`. It covers integer and floating-point
-arithmetic, the documented LN/ATN accuracy quirks (printed, not
-asserted — compare against the baseline ROM's output), strings
+arithmetic, the formerly buggy LN/ATN values (asserted against the
+correct results since Change 22), strings
 (including zero-length stores, which exercise the L91EF string-store
 path changed in Change 16), FOR/NEXT (bare NEXT, named NEXT, STEP up
 and down, float loops, nesting), REPEAT/UNTIL, GOTO/GOSUB/ON,
@@ -55,10 +55,12 @@ is the speed-features variant.
    The `BASIC 4r32` banner (title `BASIC`) appears and it is now the current language, so
    error handling (BRK → REPORT) works normally.
 4. `*EXEC STEST` — types the self-test in and runs it. Expect
-   `PASS=52 FAIL=0` on both variants; benchmarks (centiseconds):
-   WHILE variant B1=318 B2=368 B3=712 B4=677, FAST variant
-   B1=266 B2=335 B3=707 B4=653. On the WHILE variant, `*EXEC WTEST`
-   runs the WHILE/ENDWHILE battery: expect `PASS=15 FAIL=0`.
+   `PASS=55 FAIL=0` on both variants (the three transcendental checks
+   assert the CORRECT values, since Change 22 fixed the LN/ATN carry
+   bug); benchmarks (centiseconds): WHILE variant B1=318 B2=368
+   B3=712 B4=677, FAST variant B1=267 B2=336 B3=708 B4=653. On the
+   WHILE variant, `*EXEC WTEST` runs the WHILE/ENDWHILE battery:
+   expect `PASS=15 FAIL=0`.
 
 Why the poke: MOS 3.20 builds its ROM-type table at &02A1+bank at
 reset, with the empty sideways-RAM banks unplugged, so a freshly
