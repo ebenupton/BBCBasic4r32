@@ -1007,6 +1007,24 @@ loops): B1=318 B2=368 B3=712 B4=677.
   stale return address on the stack.
 - **Space-skip restructures (Changes 6–10):** correctly rejected —
   caller Y/X exit conventions are load-bearing.
+- **Cold-path mining (July 2026 survey — RENUMBER, LIST, tokeniser,
+  assembler, licensed to get slower):** mechanical duplication in
+  these regions is nearly absent; the confirmed extractions total
+  only ~27-35 bytes: LBA6E's pointer copy is identical to LCPYW
+  (-9); the 2-byte line-number operand fetch (STA L2B/INY/LDA/STA
+  L2A) repeats at four GOTO-class/AUTO/LIST sites (-8, +12 cycles per
+  GOTO against its hundreds-cycle line search); two cold sites can
+  JSR the existing LWGET fetch helper (-6, while variant only); two
+  tiny assembler operand-parse pairs (-4). Adjacent but only
+  borderline-licensed: the 4x-unrolled mantissa shift at L83D3 rolls
+  into a loop (-8, ~+30 cycles per call, callers are in the trig
+  argument-reduction path). Speculative at redesign risk: merging the
+  assembler OPT-listing token printer with LIST's loop (~-15-20).
+  Rejected: variable-length keyword-table flags (no spare marker bit
+  - token bytes use the full $80-$FF range). Conclusion: even fully
+  mined, the while variant reaches ~60-65 free bytes - not enough for
+  the ~155-byte block-IF; the fast variant can fund block-IF from its
+  still-present service frills (~142) plus this mining.
 - **Restoring the performance features:** Changes 11/13/14/19/20a are
   cleanly revertable from git history if WHILE/ENDWHILE is ever
   dropped, or fundable by the companion-bank design sketched in the
