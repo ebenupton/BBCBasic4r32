@@ -46,7 +46,8 @@ disc: all
 	    FAST=$(DIS)/Basic432_fast.bin,8000,8000 \
 	    STEST=tests/selftest.txt \
 	    WTEST=tests/whiletest.txt \
-	    ITEST=tests/iftest.txt
+	    ITEST=tests/iftest.txt \
+	    BSEARCH=tests/bsearch.txt
 
 clean:
 	rm -f $(ROMS)

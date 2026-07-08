@@ -22,7 +22,12 @@ B4=653 (a couple of centiseconds of timer jitter is normal).
 `whiletest.bas` (on the disc as `WTEST`, also `*EXEC`-able) is the
 WHILE/ENDWHILE acceptance battery: expect `PASS=15 FAIL=0`.
 `iftest.bas` (`ITEST`) is the block IF...THEN/ELSE/ENDIF battery
-(Changes 24 and 27, while variant only): expect `PASS=26 FAIL=0`. Note that
+(Changes 24 and 27, while variant only): expect `PASS=26 FAIL=0`.
+`bsearch.bas` (`BSEARCH`) is a demo rather than a test: a binary
+search over a sorted array using a multi-line WHILE with a nested
+block IF/ELSE/ENDIF inside the ELSE branch. `*EXEC BSEARCH` prints
+`13 found at index 6`; change line 30 to a key not in the array
+(e.g. 14) for the `not found` branch. Note that
 WHILE programs must be entered through the ROM's own tokeniser
 (typed, `*EXEC`, or LOAD of a ROM-tokenised file) — host-side
 tokenisers such as jsbeeb's `load_basic` do not know the new tokens.
