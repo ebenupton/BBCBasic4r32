@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 34 changes to the ROM, targeting the 65C02.
+This memo describes 35 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1206,7 +1206,8 @@ coercion, @%=, LET, spaces around '=', the full GOTO battery
 
 ---
 
-## Change 30: header and keyword-table trims (both variants)
+## Change 30: header and keyword-table trims (both variants; the
+COLOR deletion was reversed by Change 35)
 
 Three community-suggested byte sources, 24 in total:
 
@@ -1380,6 +1381,34 @@ pass on the edited handlers.
 
 ---
 
+## Change 35: reinstate the COLOR alias (both variants)
+
+**Location:** keyword table (entry restored after COLOUR), funded by
+LA8B3, LPO39 and the while scanner.
+
+Change 30 deleted the COLOR spelling to fund the header trims;
+programs using the American spelling then failed to tokenise on
+either variant - a real compatibility loss against stock 4r32. The
+7-byte entry (`EQUS "COLOR" / EQUB $FB,$02`, after COLOUR so the
+longer spelling still matches first) is reinstated in both variants,
+paid for by:
+
+- Two more BIT-abs skip-trick sites from a generalised scan (any
+  2-byte instruction behind a BRA, not just load-immediates): the
+  LA8B3/LA8B9 pair in the LN region (safe - only carry must survive
+  to the PHP at the join, and BIT preserves it) and LPO39's own hop
+  over LBD46 (-2 shared).
+- The while scanner's LWEL1 leading-space loop reimplemented L8F9D
+  by hand; calling it instead saves 4 (while only).
+
+**Measured/verified:** `10 COLOR 1` tokenises and LISTs as
+`COLOUR 1` on both variants; STEST PASS=55 both (benchmarks within
+jitter - the touched LN/FP-pop code is covered by the LN/ATN/FDIV
+checks), WTEST 15/0, ITEST 26/0 (I19's leading-space ELSE exercises
+the new LWEL1 path). Pools: while 1, fast 3.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1523,13 +1552,14 @@ the battery.
 | 32 | L9DF3/L9CD6/(L04) | -24 | while only: re-inline 3 of 4 funding merges |
 | 33 | L9C6A | +6 spent | fast only: statement-advance entry fast path |
 | 34 | immediate commands | -16 mined, spent | hot-path restores: UNTIL, float store (while); PROC, string fns (fast) |
-| | (SKIPTO pool) | +2 while / +8 fast | |
+| 35 | keyword table | +7 spent | COLOR alias reinstated (undoes part of 30) |
+| | (SKIPTO pool) | +1 while / +3 fast | |
 
-The while variant uses all 16384 bytes exactly, 2 of which are free
+The while variant uses all 16384 bytes exactly, 1 of which is free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 8; its
+stranded in the pinned region. The fast variant's pool holds 3; its
 LBF66 Tube check is now dead there too (the call-4 matcher went with
 the Change 29 strip), making it an 11-byte fixed-address stash in
 both variants (occupied by LSGNP in the while variant only). The interpreter now runs at close to original 4r32 speed

@@ -1064,6 +1064,10 @@ OSCLI   = $FFF7
 
         EQUB    $9C,$01
 
+        EQUS    "COLOR"
+
+        EQUB    $FB,$02
+
         EQUS    "DATA"
 
         EQUB    $DC,$20
@@ -8048,8 +8052,7 @@ ENDIF
 .LA8B3
         LDX     #$CA
         DEC     L30
-        BRA     LA8BB
-
+        EQUB    $2C
 .LA8B9
         LDX     #$E7
 .LA8BB
@@ -12190,8 +12193,7 @@ ENDIF
 
 .LPO39
         LDX     #$39
-        BRA     LBD48
-
+        EQUB    $2C
 .LBD46
         LDX     #$37
 .LBD48
@@ -12677,10 +12679,7 @@ IF WHILE
         BCC     LWS1
 
 .LWEL1
-        JSR     LWGET
-
-        CMP     #$20
-        BEQ     LWEL1
+        JSR     L8F9D
 
         CMP     #$8B
         BNE     LWS1D
