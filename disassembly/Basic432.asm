@@ -1,8 +1,8 @@
 ; Enable 65C02 opcodes
-; Build with -D WHILE=1 for the WHILE/ENDWHILE variant (Change 21) or
-; -D WHILE=0 for the fast variant (Changes 11/13/14/19/20 speed
-; features, no WHILE) - see the Makefile. The two variants cannot
-; coexist in the 16K image.
+; Build with -D BASICV=1 for the BASICV variant (WHILE/ENDWHILE and
+; block IF/ELSE/ENDIF, see BASICV.md) or -D BASICV=0 for the FAST
+; variant (speed features, see FAST.md) - see the Makefile. The two
+; variants cannot coexist in the 16K image.
 CPU           1
 
 L00     = $0000
@@ -1100,7 +1100,7 @@ OSCLI   = $FFF7
 
         EQUB    $E1,$01
 
-IF WHILE
+IF BASICV
 ; WHILE/ENDWHILE (Change 21) are two-byte escape-statement tokens:
 ; $87 (OFF) prefix + the entry token byte below, emitted by the hook
 ; at L8F5D when flag bit 7 is set. Entry token bytes $DC/$E3 were
@@ -1489,7 +1489,7 @@ ENDIF
         EQUS    "VPOS"
 
         EQUB    $BC,$01
-IF WHILE
+IF BASICV
 
         EQUS    "WHILE"
 
@@ -1781,7 +1781,7 @@ ENDIF
         DEC     L0A
         LDX     #$03
 .L8AC3
-IF WHILE
+IF BASICV
         JSR     LWGET
 ELSE
         LDY     L0A
@@ -2277,7 +2277,7 @@ ENDIF
 
 .L8D44
         LDX     #$01
-IF WHILE
+IF BASICV
         JSR     LWGET
 ELSE
         LDY     L0A
@@ -2724,7 +2724,7 @@ ENDIF
         ADC     #$40
 .L8F5D
         DEY
-IF WHILE
+IF BASICV
         BIT     L3D
         BPL     LWEM1
 
@@ -3057,7 +3057,7 @@ ENDIF
         BCS     L90DE
 
 .L90EA
-IF WHILE
+IF BASICV
         CMP     #$87
         BNE     LWEL0
 
@@ -3079,7 +3079,7 @@ ENDIF
         STX     L19
         LDX     L0C
         STX     L1A
-IF WHILE=0
+IF BASICV=0
 ; Assignment-side twin of the Change 28 gate (Change 29): peek the
 ; second character once; '%' goes out of line to LFASN, any other
 ; name-class character enters the generic parse past the resident
@@ -3107,7 +3107,7 @@ IF WHILE=0
 ENDIF
         JSR     L99D6
 
-IF WHILE=0
+IF BASICV=0
 .LASGP
 ENDIF
         BNE     L9112
@@ -3765,7 +3765,7 @@ ENDIF
         EQUB    $00
         EQUS    "Silly",$00
 
-IF WHILE=0
+IF BASICV=0
 ; Single-digit decimal literal fast path. On entry A = first char
 ; ($2E-$3E from the dispatch above), Y = its offset, L1B = offset+1.
 ; If A is a digit and the next character cannot continue a numeric
@@ -3818,7 +3818,7 @@ IF WHILE=0
 
 ENDIF
 
-IF WHILE=0
+IF BASICV=0
 ; Resident-integer assignment fast path (Change 29): X = first char
 ; (from the L90EE gate, known to be followed by '%'), Y at the '%'.
 ; @%-Z% with no '(', '!' or '?' after the '%' assigns through L9135
@@ -3861,7 +3861,7 @@ IF WHILE=0
         JMP     LASGG
 
 ENDIF
-IF WHILE=0
+IF BASICV=0
 ; Resident-integer factor delivery (Change 28): X = first char (from
 ; the LADAC gate, known to be followed by '%'), Y at the '%'. @%-Z%
 ; with no '(', '!' or '?' after the '%' is a fixed page-4 slot -
@@ -4565,7 +4565,7 @@ ENDIF
         RTS
 
 .L97A9
-IF WHILE
+IF BASICV
         JSR     LCPYW
 
 ELSE
@@ -4617,7 +4617,7 @@ ENDIF
 
         JSR     LAC38
 
-IF WHILE
+IF BASICV
         JSR     LST27
 
 ELSE
@@ -5023,7 +5023,7 @@ ENDIF
         CMP     #$25
         BNE     L99FA
 
-IF WHILE
+IF BASICV
         LDA     #$04
         STA     L2B
         LDX     #$04
@@ -5239,7 +5239,7 @@ ENDIF
         CPX     #$2C
         BNE     L9AC1
 
-IF WHILE
+IF BASICV
         JSR     LPO39
 
 ELSE
@@ -5284,7 +5284,7 @@ ENDIF
         STA     L38
         PLA
         STA     L37
-IF WHILE
+IF BASICV
         JSR     LPO39
 
 ELSE
@@ -5457,17 +5457,17 @@ ENDIF
 
 .L9C16
         LDY     L1B
-IF WHILE
+IF BASICV
         INC     L1B
 ELSE
 .L9C18
 ENDIF
         LDA     (L19),Y
-IF WHILE=0
+IF BASICV=0
         INY
 ENDIF
         CMP     #$20
-IF WHILE
+IF BASICV
         BEQ     L9C16
 ELSE
         BEQ     L9C18
@@ -5533,7 +5533,7 @@ ENDIF
 
 .L9C6A
         LDY     L0A
-IF WHILE=0
+IF BASICV=0
 ; Change 33: in the common no-leading-space case, test the character
 ; at L0A directly instead of round-tripping through the DEY/INY
 ; pre-decrement entry (-3 cycles per statement executed). A space
@@ -5666,7 +5666,7 @@ ENDIF
         BEQ     L9CED
 
 .L9D0C
-IF WHILE
+IF BASICV
         DEY
         LDA     (L0B),Y
         INY
@@ -5685,7 +5685,7 @@ ENDIF
         CMP     L21
         LDA     L2B
         SBC     L22
-IF WHILE
+IF BASICV
         BCC     L9D0G
 
         JMP     L9C92
@@ -6873,7 +6873,7 @@ ENDIF
         LDA     #$FF
         JMP     L82DD
 
-IF WHILE=0
+IF BASICV=0
 ; Entry restructured (Change 20): the character checks now precede the
 ; state setup, so the literal fast path's fall-back can enter at LNUMD
 ; with A = digit value and skip them. EOR #$30 maps '0'-'9' to 0-9 in
@@ -6882,7 +6882,7 @@ IF WHILE=0
 ; digit value (0-9) from the '.' marker ($2E).
 ENDIF
 .LA2DD
-IF WHILE=0
+IF BASICV=0
         EOR     #$30
         CMP     #$0A
         BCC     LNUMD
@@ -6902,7 +6902,7 @@ ENDIF
         STZ     L48
         LDX     #$FF
         STX     L49
-IF WHILE
+IF BASICV
         CMP     #$2E
         BEQ     LA348
 
@@ -7375,7 +7375,7 @@ ENDIF
 .LA54D
         LDA     L30
         STA     (L4A)
-IF WHILE
+IF BASICV
         JSR     LSGNP
 
 ELSE
@@ -9047,7 +9047,7 @@ ENDIF
         BCS     LADAC
 
         CMP     #$2E
-IF WHILE
+IF BASICV
         BCS     LADB6
 ELSE
         BCS     LNUMT
@@ -9060,7 +9060,7 @@ ENDIF
         BEQ     LADEE
 
 .LADAC
-IF WHILE=0
+IF BASICV=0
 ; Variable-factor gate (Change 28). Peek the second character once:
 ; '%' means a resident-integer candidate (out of line at LFRES);
 ; anything else on a name-class first char enters the generic parse
@@ -9609,7 +9609,7 @@ ENDIF
         INY
         JSR     L995A
 
-IF WHILE
+IF BASICV
         BRA     LB0B0
 ELSE
         JMP     LB0B0
@@ -9652,7 +9652,7 @@ ENDIF
         PHA
         LDA     L0C
         PHA
-IF WHILE=0
+IF BASICV=0
 ; PROC/FN call-site cache (Change 31). Key: the text position of
 ; the name (L1B/L19/L1A - together the exact address, so a false hit
 ; is impossible); value: L1B past the name and the variable node
@@ -9721,7 +9721,7 @@ ENDIF
         STX     L1B
         JSR     L8139
 
-IF WHILE=0
+IF BASICV=0
         BEQ     LBNEW
 
         LDA     L1B
@@ -10576,7 +10576,7 @@ ENDIF
         INC     L3C
 .LB516
         CMP     #$F4
-IF WHILE
+IF BASICV
         BNE     LB51A
 
         STA     L4C
@@ -10585,7 +10585,7 @@ IF WHILE
 ENDIF
         BNE     LB51C
 
-IF WHILE
+IF BASICV
         JMP     LWLIST
 
 ELSE
@@ -10594,14 +10594,14 @@ ENDIF
 .LB51C
         JSR     LBD77
 
-IF WHILE
+IF BASICV
 .LB51F
 ENDIF
         INY
         BRA     LB4E2
 
 .LB522
-IF WHILE=0
+IF BASICV=0
         LDY     L0A
         LDA     (L0B),Y
         CMP     #$0D
@@ -10610,11 +10610,11 @@ IF WHILE=0
         BEQ     LB_bare
 ENDIF
         JSR     L99C4
-IF WHILE
+IF BASICV
 
 ENDIF
         BNE     LB530
-IF WHILE
+IF BASICV
 
 ELSE
 .LB_bare
@@ -10622,7 +10622,7 @@ ELSE
 ENDIF
         LDX     L26
         BEQ     LB563
-IF WHILE
+IF BASICV
 
 ENDIF
         BCS     LB56A
@@ -10729,13 +10729,13 @@ ENDIF
         LDA     L0527,X
         STY     L0B
         STA     L0C
-IF WHILE
+IF BASICV
         JSR     L9C8A
 ELSE
         JSR     L9C8E
 ENDIF
 
-IF WHILE
+IF BASICV
         JMP     L90D0
 ELSE
         LDY     #$01
@@ -11183,7 +11183,7 @@ ENDIF
         LDA     #$80
         TRB     L2B
 .LB866
-IF WHILE=0
+IF BASICV=0
 ; Forward line search (Change 29, validated under Change 28): when
 ; the jump is the first statement of a line, (L0B) sits on the $0D
 ; and the current line number is knowable; a target >= it is found
@@ -11597,7 +11597,7 @@ ENDIF
 .LBA46
         RTS
 
-IF WHILE
+IF BASICV
 ; Shared loop-condition evaluator (WHILE, ENDWHILE): evaluate the
 ; expression at the current text pointer, resync (includes the
 ; Escape check via L9C55), coerce to integer; returns A = zero flag
@@ -11659,7 +11659,7 @@ ENDIF
         TYA
         RTS
 
-IF WHILE
+IF BASICV
 ; Shared loop-stack push (REPEAT, WHILE): depth check, normalise the
 ; text pointer (folds Y, sets L0A=1), push it. Enter with Y = offset
 ; of the last consumed byte, as REPEAT always has.
@@ -11678,7 +11678,7 @@ ENDIF
         LDA     L0C
         STA     L0514,X
         INC     L24
-IF WHILE
+IF BASICV
         RTS
 
 .LBA88
@@ -11941,7 +11941,7 @@ ENDIF
         DEX
         BNE     LBBF8
 
-IF WHILE=0
+IF BASICV=0
         STZ     L50
 ENDIF
         RTS
@@ -12523,12 +12523,12 @@ ENDIF
         EQUS    "yntax",$00
         EQUS    "ro",$00
 
-IF WHILE
+IF BASICV
 ; ---------------------------------------------------------------
 ; WHILE/ENDWHILE (Change 21). Statement dispatch lands here on the
 ; $87 escape prefix; the second token byte selects the construct.
 ; WHILE shares the REPEAT stack (LPUSH) and condition evaluator
-; (LEVAL); see WHILE_PLAN.md and OPTIMISATIONS.md.
+; (LEVAL); see BASICV.md.
 ; Fetch the next program byte: Y = its offset on return.
 .LWGET
         LDY     L0A
@@ -12831,7 +12831,7 @@ ENDIF
 
 ; LBEFD must sit at its original address (page-$BF constant pool and
 ; LBF00/LBEFE table bases are addressed by fixed low bytes; see
-; OPTIMISATIONS.md). SKIPTO asserts the group above is unchanged.
+; FAST.md). SKIPTO asserts the group above is unchanged.
         SKIPTO  &BEFD
 
 .LBEFD
@@ -12916,7 +12916,7 @@ LBEFE = LBEFD+1
         LDY     #$06
         JMP     OSCLI
 
-IF WHILE
+IF BASICV
 ; The Tube-presence check is dead in this variant (its only caller
 ; went with the Change 21 service strip), so its 11 pinned bytes
 ; host the sign-pack helper instead (Change 25). With the LDY #$01
@@ -12986,8 +12986,8 @@ ENDIF
         EQUB    $FD,$13,$04,$81,$E6,$66,$66,$66
 
 .BeebDisEndAddr
-IF WHILE
-SAVE "Basic432_while.bin",BeebDisStartAddr,BeebDisEndAddr
+IF BASICV
+SAVE "Basic432_basicv.bin",BeebDisStartAddr,BeebDisEndAddr
 ELSE
 SAVE "Basic432_fast.bin",BeebDisStartAddr,BeebDisEndAddr
 ENDIF
