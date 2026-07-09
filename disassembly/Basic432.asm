@@ -171,27 +171,18 @@ OSCLI   = $FFF7
 .L8028
         EQUW    $C000,$0082
 
-IF WHILE
-; Service handler (slimmed for Change 21): only the reset/workspace
-; calls ($02, $27) are claimed, registering this bank as the BASIC
-; ROM via OSBYTE $BB so the Master MOS's built-in *BASIC finds us.
-; The *HELP responder and the *BASIC/*HBASIC command matcher with its
-; Tube entry machinery were removed to fund WHILE/ENDWHILE - see
-; OPTIMISATIONS.md (spec-compliant: unclaimed calls pass on with A
-; preserved, as required).
-ENDIF
+; Service handler (slimmed for Change 21, and for the fast variant
+; in Change 29): only the reset/workspace calls ($02, $27) are
+; claimed, registering this bank as the BASIC ROM via OSBYTE $BB so
+; the Master MOS's built-in *BASIC finds us. The *HELP responder and
+; the *BASIC/*HBASIC command matcher with its Tube entry machinery
+; were removed to fund WHILE/ENDWHILE (while) and the Change 29
+; speed features (fast) - spec-compliant: unclaimed calls pass on
+; with A preserved, as required.
 .L802C
         PHA
         TAX
         PHY
-IF WHILE=0
-        CPX     #$09
-        BEQ     L804C
-
-        CPX     #$04
-        BEQ     L8070
-
-ENDIF
         CPX     #$02
         BEQ     L8040
 
@@ -206,119 +197,10 @@ ENDIF
 
         BRA     L806A
 
-IF WHILE=0
-.L804C
-        LDA     (LF2),Y
-        CMP     #$0D
-        BNE     L806A
-
-        JSR     OSNEWL
-
-        LDX     #$F6
-.L8057
-        LDA     L7F13,X
-        BNE     L805E
-
-        LDA     #$20
-.L805E
-        JSR     OSASCI
-
-        INX
-        BNE     L8057
-
-        JSR     OSNEWL
-
-.L8067
-        JSR     L80D8
-
-ENDIF
 .L806A
         PLY
         LDX     LF4
         PLA
-IF WHILE=0
-        RTS
-
-.L8070
-        LDA     (LF2),Y
-        AND     #$DF
-        CMP     #$48
-        BNE     L808F
-
-        INY
-        LDA     #$40
-        TSB     LF4
-        LDA     (LF2),Y
-        INY
-        CMP     #$2E
-        BEQ     L80A8
-
-        AND     #$DF
-        CMP     #$49
-        BEQ     L808F
-
-        JSR     L80D8
-
-        DEY
-        DEY
-.L808F
-        LDX     #$FB
-.L8091
-        LDA     (LF2),Y
-        CMP     #$2E
-        BEQ     L80A8
-
-        AND     #$DF
-        CMP     L7F0E,X
-        BNE     L8067
-
-        INY
-        INX
-        BNE     L8091
-
-        LDA     (LF2),Y
-        CMP     #$21
-        BCS     L8067
-
-.L80A8
-        BIT     LF4
-        BVC     L80CC
-
-        JSR     LBF66
-
-        BNE     L80CC
-
-        JSR     L80D8
-
-        LDX     #$0A
-.L80B6
-        LDA     L80C2,X
-        STA     L0100,X
-        DEX
-        BPL     L80B6
-
-        JMP     L0100
-
-.L80C2
-        BRK
-        EQUB    $00
-
-        EQUS    "No TUBE"
-
-        EQUB    $00
-
-.L80CC
-        LDA     LF4
-        EOR     #$40
-        TAX
-        LDA     #$8E
-        LDY     #$00
-        JMP     OSBYTE
-
-.L80D8
-        LDA     #$40
-        TRB     LF4
-ENDIF
         RTS
 
 .L80DD
@@ -3187,8 +3069,37 @@ ENDIF
         STX     L19
         LDX     L0C
         STX     L1A
+IF WHILE=0
+; Assignment-side twin of the Change 28 gate (Change 29): peek the
+; second character once; '%' goes out of line to LFASN, any other
+; name-class character enters the generic parse past the resident
+; checks. Sub-'@' (digits, indirection) keeps the original path.
+        CMP     #$40
+        BCC     LASGG
+
+        TAX
+        INY
+        LDA     (L19),Y
+        CMP     #$25
+        BEQ     LASGJ
+
+        TXA
+        DEY
+        STY     L1B
+        JSR     L99FA
+
+        BRA     LASGP
+
+.LASGJ
+        JMP     LFASN
+
+.LASGG
+ENDIF
         JSR     L99D6
 
+IF WHILE=0
+.LASGP
+ENDIF
         BNE     L9112
 
         BCS     L90B0
@@ -3250,11 +3161,8 @@ ENDIF
 
         JSR     LB365
 
-IF WHILE
         JMP     L90CA
-ELSE
-        BRA     L90CA
-ENDIF
+
 
 .L9146
         JMP     L9C2D
@@ -3900,6 +3808,49 @@ IF WHILE=0
 
 ENDIF
 
+IF WHILE=0
+; Resident-integer assignment fast path (Change 29): X = first char
+; (from the L90EE gate, known to be followed by '%'), Y at the '%'.
+; @%-Z% with no '(', '!' or '?' after the '%' assigns through L9135
+; with the page-4 slot passed in L2A/L2B/L2C directly, skipping the
+; generic name parse; L9C16/LB365 handle spaces, '=', coercion and
+; the store exactly as before.
+.LFASN
+        CPX     #$40
+        BCC     LFASX
+
+        CPX     #$5B
+        BCS     LFASX
+
+        INY
+        LDA     (L19),Y
+        CMP     #$28
+        BEQ     LFASY
+
+        CMP     #$21
+        BEQ     LFASY
+
+        CMP     #$3F
+        BEQ     LFASY
+
+        STY     L1B
+        TXA
+        ASL     A
+        ASL     A
+        STA     L2A
+        LDX     #$04
+        STX     L2B
+        STX     L2C
+        JMP     L9135
+
+.LFASY
+        DEY
+.LFASX
+        TXA
+        DEY
+        JMP     LASGG
+
+ENDIF
 IF WHILE=0
 ; Resident-integer factor delivery (Change 28): X = first char (from
 ; the LADAC gate, known to be followed by '%'), Y at the '%'. @%-Z%
@@ -11136,10 +11087,46 @@ ENDIF
         LDA     #$80
         TRB     L2B
 .LB866
+IF WHILE=0
+; Forward line search (Change 29, validated under Change 28): when
+; the jump is the first statement of a line, (L0B) sits on the $0D
+; and the current line number is knowable; a target >= it is found
+; by entering L8191's loop at L8197 with the cursor preset to the
+; current line, skipping the walk from PAGE. Any miss falls back to
+; the full search, so a wrong guess can never turn a valid target
+; into an error.
+        LDA     (L0B)
+        CMP     #$0D
+        BNE     LB86G
+
+        LDY     #$01
+        LDA     L2B
+        CMP     (L0B),Y
+        BCC     LB86G
+
+        BNE     LB86H
+
+        INY
+        LDA     L2A
+        CMP     (L0B),Y
+        BCC     LB86G
+
+.LB86H
+        LDA     L0B
+        STA     L3D
+        LDA     L0C
+        STA     L3E
+        JSR     L8197
+
+        BCS     LB86I
+
+.LB86G
+ENDIF
         JSR     L8191
 
         BCC     LB824
 
+.LB86I
         RTS
 
 .LB86C

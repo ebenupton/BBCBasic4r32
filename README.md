@@ -145,9 +145,11 @@ for how they are built and verified):
   cycles per statement of the original 4r32
 - `roms/Basic432_fast.rom` — no new constructs, instead the speed
   features (faster tight FOR/NEXT loops, single-digit constants,
-  string stores, and direct page-4 access for `@%`-`Z%` in
-  expressions — integer REPEAT loops run ~12% faster than stock
-  4r32 on ClockSp), plus the LN/ATN fix
+  string stores, direct page-4 access for `@%`-`Z%` in expressions
+  and assignments, and a forward line search for GOTO/GOSUB —
+  integer REPEAT loops run ~12% faster than stock 4r32 on ClockSp),
+  plus the LN/ATN fix; its `*HELP` frills are stripped as in the
+  while variant
 
 Both require a 65C02 (Master 128, or a B with a 65C02 fitted). The
 two feature sets do not fit in 16K together — that trade and every

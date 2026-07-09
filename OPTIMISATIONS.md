@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 28 changes to the ROM, targeting the 65C02.
+This memo describes 29 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1166,6 +1166,46 @@ Spent: 84 of the 89-byte pool (5 remain).
 
 ---
 
+## Change 29: fast-variant round two - the WHILE funding, ported
+
+**Location:** service handler, L90EE gate + LFASN, LB866. Fast
+variant only; the while image is bit-identical.
+
+The savings that paid for WHILE/block-IF are now applied to the fast
+variant too, as originally intended. The service-frill strip (~142:
+the *HELP responder and the *BASIC/*HBASIC matcher with its Tube
+machinery; the $02/$27 OSBYTE $BB registration and the pass-on
+convention are kept, so the ROM stays service-protocol compliant and
+the Master's *BASIC still works - verified live: *HELP lists the
+other ROMs cleanly with this bank silent) funds:
+
+- **The assignment-side twin of Change 28** (~70): the same
+  second-character gate at L90EE routes `X%=' to LFASN, which passes
+  the page-4 slot to L9135 in L2A/L2B/L2C directly - L9C16 (spaces
+  and '='), LB365 (evaluate, coerce, store) all reused - and routes
+  named-variable assignments into L99FA past the resident checks,
+  so they speed up slightly as well. The lvalue punts ('(', '!',
+  '?') unwind Y by punt depth (a one-DEY bug here made `I%!0=` a
+  Syntax error on the first build - caught by the semantics battery).
+- **The GOTO/GOSUB/THEN-target forward search** (~37) validated
+  under Change 28, now applied: line-start jumps with targets at or
+  after the current line enter L8191's loop with the cursor preset
+  to the current line instead of PAGE, with fall-back-on-miss.
+
+**Measured** (jsbeeb Master 128, fresh boot): ClockSp Integer REPEAT
+2.52 (2.24 before Change 28, +12.5% cumulative), Integer FOR 2.64,
+Real/Variant REPEAT 2.39, everything else at or above baseline,
+average 2.88 vs 2.85. STEST B2 335 -> 319 (-4.8% cumulative), B4
+651 -> 625, PASS=55. A direct A/B against the Change 28 image on the
+same machine (float FOR/NEXT with and without STEP, 20000
+iterations: 851 vs 849 cs) dismissed an apparent float-FOR
+regression in one ClockSp run as a session artifact. Semantics:
+lvalue indirection (I%!0=, I%?1=, I%!J%=), arrays, float->int
+coercion, @%=, LET, spaces around '=', the full GOTO battery
+(T=251015), *HELP degradation. Fast pool: 47.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1303,14 +1343,17 @@ the battery.
 | 26 | L9330 x2, LST27, LPO39, LMTCH, LRSYN, LSKRB | -16 | preamble folds + call-pair wrappers |
 | 27 | block ELSE | -30 spent | completes BASIC V block IF |
 | 28 | LADAC/LFRES | -84 spent | fast only: resident-integer factor fast path |
-| | (SKIPTO pool) | +2 while / +5 fast | |
+| 29 | strip + LFASN + LB866 | net -37 | fast only: frill strip funds assign twin + GOTO search |
+| | (SKIPTO pool) | +2 while / +47 fast | |
 
 The while variant uses all 16384 bytes exactly, 2 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 5 and
-its LBF66 is live. The interpreter now runs at close to original 4r32 speed
+stranded in the pinned region. The fast variant's pool holds 47; its
+LBF66 Tube check is now dead there too (the call-4 matcher went with
+the Change 29 strip), making it an 11-byte fixed-address stash in
+both variants (occupied by LSGNP in the while variant only). The interpreter now runs at close to original 4r32 speed
 (slightly slower: +12 cycles on each of IF, expression evaluation
 entry, real-variable store, and UNTIL, from the funding merges), and
 gains WHILE/ENDWHILE and full block IF/ELSE/ENDIF. Benchmarks (centiseconds, Master 128, suite
