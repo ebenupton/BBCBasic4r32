@@ -64,7 +64,7 @@ is the speed-features variant.
    ?&2A5=&40
    *FX 142,4
    ```
-   The `BASIC 4r32` banner (title `BASIC`) appears and it is now the current language, so
+   The `BASIC` banner appears and it is now the current language, so
    error handling (BRK → REPORT) works normally.
 4. `*EXEC STEST` — types the self-test in and runs it. Expect
    `PASS=55 FAIL=0` on both variants (the three transcendental checks

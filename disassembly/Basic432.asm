@@ -158,13 +158,16 @@ OSCLI   = $FFF7
 
         JMP     L802C
 
-        EQUB    $E2,$13,$07
+        EQUB    $E2,$0E,$07
 
-        EQUS    "BASIC",$00
+        EQUS    "BASIC"
 
-        EQUS    "4r32",$00
+; the title's terminator doubles as the copyright NUL (header offset
+; $0E) and as the clean-start REPORT string pointer target
+.LCOPY
+        EQUB    $00
 
-        EQUS    "(C)1988 Acorn",$0A,$0D,$00
+        EQUS    "(C)",$00
 
         EQUW    $B800,L8028
 
@@ -233,9 +236,9 @@ OSCLI   = $FFF7
         JSR     OSBYTE
 
         STY     L18
-        LDX     #$13
+        LDX     #LO(LCOPY)
         STX     LFD
-        LDX     #$80
+        LDX     #HI(LCOPY)
         STX     LFE
         STZ     L1F
         STZ     L0402
@@ -1052,10 +1055,6 @@ OSCLI   = $FFF7
         EQUS    "COUNT"
 
         EQUB    $9C,$01
-
-        EQUS    "COLOR"
-
-        EQUB    $FB,$02
 
         EQUS    "DATA"
 

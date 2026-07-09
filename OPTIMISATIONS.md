@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 29 changes to the ROM, targeting the 65C02.
+This memo describes 30 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1206,6 +1206,35 @@ coercion, @%=, LET, spaces around '=', the full GOTO battery
 
 ---
 
+## Change 30: header and keyword-table trims (both variants)
+
+Three community-suggested byte sources, 24 in total:
+
+- **The COLOR alias** (7): the American-spelling keyword entry
+  shares COLOUR's token ($FB) and sits after it, so LIST always
+  printed COLOUR and tokenised programs are unaffected; only typing
+  COLOR stops working (now `Mistake`).
+- **The "4r32" version string** (5): the ROM header's optional
+  version field. The title's terminator now doubles as the
+  copyright-preceding NUL (offset byte $13 -> $0E).
+- **The copyright text** (12): `"(C)1988 Acorn",$0A,$0D` becomes the
+  minimum the MOS requires to recognise the ROM: `"(C)"`. REPORT
+  after a clean start now prints just `(C)`.
+
+One landmine found and defused: the reset code loaded the MOS error
+pointer with a HARDCODED $8013 (the old copyright NUL), so REPORT
+printed garbage after the trim - the address is now the LCOPY label
+(same size). This also retires Change 18's constraint note about the
+copyright string flowing $0A/$0D through the message expander.
+
+**Saved: 24 bytes, both variants** (while pool 2 -> 26, fast
+70). Verified on both: MOS still recognises and enters the ROM,
+REPORT prints `(C)`, COLOUR works and COLOR errors, and the full
+batteries pass (while: STEST 55/0, WTEST 15/0, ITEST 26/0; fast:
+STEST 55/0 with benchmarks unchanged at 266/319/702/626).
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1344,13 +1373,14 @@ the battery.
 | 27 | block ELSE | -30 spent | completes BASIC V block IF |
 | 28 | LADAC/LFRES | -84 spent | fast only: resident-integer factor fast path |
 | 29 | strip + LFASN + LB866 | net -37 | fast only: frill strip funds assign twin + GOTO search |
-| | (SKIPTO pool) | +2 while / +47 fast | |
+| 30 | header + COLOR | -24 | version string, minimal (C), COLOR alias |
+| | (SKIPTO pool) | +26 while / +70 fast | |
 
-The while variant uses all 16384 bytes exactly, 2 of which are free
+The while variant uses all 16384 bytes exactly, 26 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 47; its
+stranded in the pinned region. The fast variant's pool holds 70; its
 LBF66 Tube check is now dead there too (the call-4 matcher went with
 the Change 29 strip), making it an 11-byte fixed-address stash in
 both variants (occupied by LSGNP in the while variant only). The interpreter now runs at close to original 4r32 speed
