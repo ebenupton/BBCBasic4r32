@@ -84,6 +84,14 @@ L4B     = $004B
 L4C     = $004C
 L4D     = $004D
 L4E     = $004E
+; $50-$55: PROC/FN call-site cache (Change 31, fast variant) - zero
+; page that BASIC documents as its own but has never used
+L50     = $0050
+L51     = $0051
+L52     = $0052
+L53     = $0053
+L54     = $0054
+L55     = $0055
 LF2     = $00F2
 LF4     = $00F4
 LFD     = $00FD
@@ -9570,7 +9578,11 @@ ENDIF
         INY
         JSR     L995A
 
+IF WHILE
         BRA     LB0B0
+ELSE
+        JMP     LB0B0
+ENDIF
 
 .LB04A
         BRK
@@ -9609,6 +9621,51 @@ ENDIF
         PHA
         LDA     L0C
         PHA
+IF WHILE=0
+; PROC/FN call-site cache (Change 31). Key: the text position of
+; the name (L1B/L19/L1A - together the exact address, so a false hit
+; is impossible); value: L1B past the name and the variable node
+; pointer. Same site means same node while the program and variables
+; stand - LBBDC's head wipe (every NEW, edit, RUN, CLEAR, LOAD)
+; invalidates. The compare-then-store trick updates the key as it
+; checks it (STA leaves Z alone); a zero name-consumed byte (L53)
+; marks the entry invalid, so an error mid-resolution cannot leave a
+; fresh key over a stale value. Lives in $50-$55, zero page BASIC
+; documents as its own but has never used. Measured: repeated-site
+; calls (tight loops, recursion) -6%; pure alternating-site pairs
+; pay ~23 cycles a call (+2% of call overhead) - the right trade at
+; real-program scale.
+        LDA     L1B
+        CMP     L50
+        STA     L50
+        BNE     LBMIS
+
+        LDA     L19
+        CMP     L51
+        STA     L51
+        BNE     LBMIS
+
+        LDA     L1A
+        CMP     L52
+        STA     L52
+        BNE     LBMIS
+
+        LDA     L53
+        BEQ     LBMIS
+
+        STA     L1B
+        LDA     L54
+        STA     L2A
+        LDA     L55
+        STA     L2B
+        BRA     LB0A6
+
+.LBNEW
+        JMP     LAFD5
+
+.LBMIS
+        STZ     L53
+ENDIF
         LDA     L1B
         TAX
         CLC
@@ -9633,10 +9690,21 @@ ENDIF
         STX     L1B
         JSR     L8139
 
+IF WHILE=0
+        BEQ     LBNEW
+
+        LDA     L1B
+        STA     L53
+        LDA     L2A
+        STA     L54
+        LDA     L2B
+        STA     L55
+ELSE
         BNE     LB0A6
 
         JMP     LAFD5
 
+ENDIF
 .LB0A6
         LDA     (L2A)
         STA     L0B
@@ -11847,6 +11915,9 @@ ENDIF
         DEX
         BNE     LBBF8
 
+IF WHILE=0
+        STZ     L50
+ENDIF
         RTS
 
 .LBBFF

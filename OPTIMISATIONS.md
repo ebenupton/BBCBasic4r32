@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 30 changes to the ROM, targeting the 65C02.
+This memo describes 31 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1235,6 +1235,49 @@ STEST 55/0 with benchmarks unchanged at 266/319/702/626).
 
 ---
 
+## Change 31: PROC/FN call-site cache (fast variant)
+
+**Location:** LB057 (check + fill), LBBED tail (invalidation),
+$50-$55 zero page. Fast only; the while image is bit-identical.
+
+**Method.** PC-sampling of a tight PROC loop put ~27% of call time
+in the LB057 engine, most of it the per-call name resolution
+(address computation, L9BBC name scan, L8139 chain walk) that
+re-finds a node whose location cannot have changed. The cache keys
+on the call site's text position (L1B/L19/L1A - together the exact
+address, so a false hit is impossible) and holds L1B past the name
+plus the node pointer. A hit skips resolution entirely and jumps to
+LB0A6 with the node in L2A/L2B. The compare-then-store trick updates
+the key while checking it (STA leaves Z alone); L53=0 marks the
+value invalid, so an error mid-resolution cannot leave a fresh key
+over a stale value. LBBDC's chain-head wipe - the single funnel for
+NEW, line edits, RUN, CLEAR and LOAD - clears the key, verified by
+the adversarial case (immediate-mode call, program edit that moves
+the heap, identical immediate-mode call re-resolves). The cache
+lives in $50-$55: zero page inside BASIC's documented allocation
+that the interpreter has never actually used, so user code (told to
+stay in &70-&8F) cannot collide with it. FN calls share the engine
+and the cache; recursion hits from the second level down.
+
+**Design notes from the measurements**: a 2-entry variant hashed on
+an L0A bit was built and rejected - adjacent call sites sit ~3 bytes
+apart, so no single offset bit separates them reliably, and a
+collision costs more than one entry ever did. An absolute-address
+key (2 bytes) was also tried and rejected: it computes the key
+before comparing, making the common miss dearer than the 3-byte
+tuple's first-byte early-out.
+
+**Measured** (jsbeeb Master 128, A/B vs Change 30 and fresh-boot
+ClockSp): ClockSp Procedure call 2.17 -> 2.84 (+31%), average 2.89
+-> 2.94; microbenches: repeated-site PROC loop -6.5% (337 -> 315 cs
+per 3000 calls), pure alternating-site pairs +1.8% (331 -> 337) -
+~23 cycles a call on a pattern that only dominates in benchmarks
+that do nothing else; a GOSUB A/B (82 vs 81 cs per 2000 calls)
+confirmed neighbouring paths untouched. STEST 55/0 with benchmarks
+unchanged. Spent: 57 of 70 (13 remain).
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1374,13 +1417,14 @@ the battery.
 | 28 | LADAC/LFRES | -84 spent | fast only: resident-integer factor fast path |
 | 29 | strip + LFASN + LB866 | net -37 | fast only: frill strip funds assign twin + GOTO search |
 | 30 | header + COLOR | -24 | version string, minimal (C), COLOR alias |
-| | (SKIPTO pool) | +26 while / +70 fast | |
+| 31 | LB057 cache | -57 | fast only: PROC/FN call-site cache, ClockSp PROC +31% |
+| | (SKIPTO pool) | +26 while / +13 fast | |
 
 The while variant uses all 16384 bytes exactly, 26 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 70; its
+stranded in the pinned region. The fast variant's pool holds 13; its
 LBF66 Tube check is now dead there too (the call-4 matcher went with
 the Change 29 strip), making it an 11-byte fixed-address stash in
 both variants (occupied by LSGNP in the while variant only). The interpreter now runs at close to original 4r32 speed
