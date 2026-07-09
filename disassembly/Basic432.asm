@@ -5502,6 +5502,16 @@ ENDIF
 
 .L9C6A
         LDY     L0A
+IF WHILE=0
+; Change 33: in the common no-leading-space case, test the character
+; at L0A directly instead of round-tripping through the DEY/INY
+; pre-decrement entry (-3 cycles per statement executed). A space
+; falls into the loop and is re-read once.
+        LDA     (L0B),Y
+        CMP     #$20
+        BNE     L9C74
+
+ENDIF
 .L9C6C
         DEY
 .L9C6D

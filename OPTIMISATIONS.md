@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 32 changes to the ROM, targeting the 65C02.
+This memo describes 33 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1301,6 +1301,31 @@ ITEST 26/0.
 
 ---
 
+## Change 33: statement-advance entry fast path (fast variant)
+
+**Location:** L9C6A. Fast variant only (gated; the while image is
+bit-identical).
+
+L9C6A — the routine that advances the text pointer past the current
+statement's terminator, executed once per statement that returns to
+the main loop through L90C7 (PRINT, IF, GOSUB, VDU, and most other
+keywords; assignments, UNTIL and NEXT use bypass entries) — enters
+through a DEY/INY pair that exists only so the entry can fall into
+the L9C6C pre-decrement entry used by callers with Y already set. In
+the overwhelmingly common case of no space before the `:` or CR, a
+direct test of the character at L0A skips the dance: -3 cycles per
+statement for +6 bytes. A leading space falls into the original loop
+and is re-read once (+9 cycles, tokenised code essentially never has
+one). Pool 13 -> 7.
+
+**Measured** (ClockSp, fast variant, fresh boot): Procedure call
+2.84 -> 2.86; every other category and the 2.94 average unchanged, as
+expected — ClockSp's loop bodies are assignments and UNTIL/NEXT,
+which bypass this entry. STEST B1-B4 within jitter of reference,
+PASS=55 FAIL=0.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1442,18 +1467,19 @@ the battery.
 | 30 | header + COLOR | -24 | version string, minimal (C), COLOR alias |
 | 31 | LB057 cache | -57 | fast only: PROC/FN call-site cache, ClockSp PROC +31% |
 | 32 | L9DF3/L9CD6/(L04) | -24 | while only: re-inline 3 of 4 funding merges |
-| | (SKIPTO pool) | +2 while / +13 fast | |
+| 33 | L9C6A | +6 spent | fast only: statement-advance entry fast path |
+| | (SKIPTO pool) | +2 while / +7 fast | |
 
 The while variant uses all 16384 bytes exactly, 2 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 13; its
+stranded in the pinned region. The fast variant's pool holds 7; its
 LBF66 Tube check is now dead there too (the call-4 matcher went with
 the Change 29 strip), making it an 11-byte fixed-address stash in
 both variants (occupied by LSGNP in the while variant only). The interpreter now runs at close to original 4r32 speed
-(slightly slower: +12 cycles on each of IF, expression evaluation
-entry, real-variable store, and UNTIL, from the funding merges), and
+(since Change 32 the residual cost is +12 cycles on UNTIL and on two
+of the three real-store sign-pack sites), and
 gains WHILE/ENDWHILE and full block IF/ELSE/ENDIF. Benchmarks (centiseconds, Master 128, suite
 loops): B1=318 B2=368 B3=712 B4=677.
 
