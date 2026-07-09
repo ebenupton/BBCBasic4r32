@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 31 changes to the ROM, targeting the 65C02.
+This memo describes 32 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1278,6 +1278,29 @@ unchanged. Spent: 57 of 70 (13 remain).
 
 ---
 
+## Change 32: unwind the hottest while-variant funding merges
+
+**Location:** L9DF3, L9CD6, the (L04) float-store site. While variant
+(the fast image is bit-identical - each edit adopts the fast branch
+of an existing gate unconditionally).
+
+Change 21 funded WHILE/ENDWHILE partly with merges that cost +12
+cycles each on four paths. The Change 30 header trims re-opened the
+pool (26), so the three hottest are re-inlined: the expression-entry
+pointer copy (every expression evaluated), the IF zero-test (every
+IF), and the sign-pack at the FP stack-push site (every float pushed
+to the expression stack). The fourth (+12 per UNTIL via the LEVAL
+share) and the two other sign-pack sites remain - LEVAL is the WHILE
+feature's own machinery and the pool ran out. One branch widened
+(L9D0F's BCS, gated). Cost: 24 of 26.
+
+**Measured** (ClockSp, while variant, fresh boot): Real/Variant
+REPEAT 2.31 -> 2.34, Integer REPEAT 2.22 -> 2.24, Trig 6.92 -> 7.00,
+average 2.73 -> 2.75; STEST B4 682 -> 677, PASS=55; WTEST 15/0,
+ITEST 26/0.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1418,9 +1441,10 @@ the battery.
 | 29 | strip + LFASN + LB866 | net -37 | fast only: frill strip funds assign twin + GOTO search |
 | 30 | header + COLOR | -24 | version string, minimal (C), COLOR alias |
 | 31 | LB057 cache | -57 | fast only: PROC/FN call-site cache, ClockSp PROC +31% |
-| | (SKIPTO pool) | +26 while / +13 fast | |
+| 32 | L9DF3/L9CD6/(L04) | -24 | while only: re-inline 3 of 4 funding merges |
+| | (SKIPTO pool) | +2 while / +13 fast | |
 
-The while variant uses all 16384 bytes exactly, 26 of which are free
+The while variant uses all 16384 bytes exactly, 2 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is

@@ -5585,15 +5585,10 @@ ENDIF
 .L9CD6
         LDY     L1B
         STY     L0A
-IF WHILE
-        JSR     LEVAL4
-
-ELSE
         LDA     L2A
         ORA     L2B
         ORA     L2C
         ORA     L2D
-ENDIF
         BEQ     L9CFB
 
         CPX     #$8C
@@ -5649,7 +5644,15 @@ ENDIF
         CMP     L21
         LDA     L2B
         SBC     L22
+IF WHILE
+        BCC     L9D0G
+
+        JMP     L9C92
+
+.L9D0G
+ELSE
         BCS     L9C92
+ENDIF
 
         LDA     #$5B
         JSR     LBDD8
@@ -5833,17 +5836,14 @@ ENDIF
         RTS
 
 .L9DF3
-IF WHILE
-        JSR     LCPYW
-
-ELSE
+; Change 32: the Change 21 LCPYW share here cost +12 cycles on every
+; expression evaluated; re-inlined in both variants.
         LDA     L0B
         STA     L19
         LDA     L0C
         STA     L1A
         LDA     L0A
         STA     L1B
-ENDIF
 .L9DFF
         JSR     L9E45
 
@@ -11970,16 +11970,11 @@ ENDIF
 
         LDA     L30
         STA     (L04)
-IF WHILE
-        JSR     LSGNP
-
-ELSE
         LDY     #$01
         LDA     L2E
         EOR     L31
         AND     #$80
         EOR     L31
-ENDIF
         STA     (L04),Y
         INY
         LDA     L32
