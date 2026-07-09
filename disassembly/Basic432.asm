@@ -2829,11 +2829,10 @@ ENDIF
 .L8FC5
         JSR     L9C6A
 
-        LDA     L18
-        STA     L38
-        STZ     L37
+        JSR     L943E
+
         LDA     #$00
-        STA     (L37),Y
+        STA     (L37)
         JSR     LBE25
 
         BRA     L9048
@@ -4562,8 +4561,19 @@ ENDIF
         RTS
 
 .L97A9
+IF WHILE
         JSR     LCPYW
 
+ELSE
+; Change 34: the Change 20 LCPYW share cost 12 cycles on every
+; PROC/FN call; the fast variant carries the copy inline again.
+        LDA     L0B
+        STA     L19
+        LDA     L0C
+        STA     L1A
+        LDA     L0A
+        STA     L1B
+ENDIF
         LDA     #$F2
         JSR     LB057
 
@@ -4603,8 +4613,14 @@ ENDIF
 
         JSR     LAC38
 
+IF WHILE
         JSR     LST27
 
+ELSE
+        STA     L27
+        JSR     LB365
+
+ENDIF
 .L97EE
         TSX
         INC     L0106,X
@@ -4701,8 +4717,7 @@ ENDIF
 
 .L9871
         LDA     #$04
-        BRA     L9877
-
+        EQUB    $2C
 .L9875
         LDA     #$05
 .L9877
@@ -5220,8 +5235,14 @@ ENDIF
         CPX     #$2C
         BNE     L9AC1
 
+IF WHILE
         JSR     LPO39
 
+ELSE
+        LDX     #$39
+        JSR     LBD48
+
+ENDIF
         PLA
         STA     L38
         PLY
@@ -5259,8 +5280,14 @@ ENDIF
         STA     L38
         PLA
         STA     L37
+IF WHILE
         JSR     LPO39
 
+ELSE
+        LDX     #$39
+        JSR     LBD48
+
+ENDIF
         LDY     L3C
         JSR     L9B97
 
@@ -6443,8 +6470,7 @@ ENDIF
 
 .LA0E8
         LDA     #$00
-        BRA     LA0EE
-
+        EQUB    $2C
 .LA0EC
         LDA     #$05
 .LA0EE
@@ -7335,8 +7361,7 @@ ENDIF
 
 .LA541
         LDA     #$76
-        BRA     LA547
-
+        EQUB    $2C
 .LA545
         LDA     #$6C
 .LA547
@@ -8506,8 +8531,7 @@ ENDIF
 
 .LAB1D
         LDA     #$02
-        BRA     LAB23
-
+        EQUB    $2C
 .LAB21
         LDA     #$00
 .LAB23
@@ -8529,12 +8553,10 @@ ENDIF
 
 .LAB37
         LDA     #$40
-        BRA     LAB41
-
+        EQUB    $2C
 .LAB3B
         LDA     #$80
-        BRA     LAB41
-
+        EQUB    $2C
 .LAB3F
         LDA     #$C0
 .LAB41
@@ -9527,12 +9549,8 @@ ENDIF
 .LAFEE
         LDY     #$03
         LDA     (L0B),Y
-        CLC
-        ADC     L0B
-        STA     L0B
-        BCC     LAFDB
+        JSR     L9CB8
 
-        INC     L0C
         BRA     LAFDB
 
 .LAFFD
@@ -10281,16 +10299,14 @@ ENDIF
 .LB39E
         LDA     L30
         STA     (L37)
-IF WHILE
-        JSR     LSGNP
-
-ELSE
+; Change 34: the LSGNP share here cost 12 cycles on every real
+; variable store; both variants carry the sign-pack inline again
+; (LSGNP itself stays in the pinned LBF66 stash for LA54D).
         LDY     #$01
         LDA     L2E
         EOR     L31
         AND     #$80
         EOR     L31
-ENDIF
         STA     (L37),Y
         INY
         LDA     L32
@@ -11579,42 +11595,40 @@ ENDIF
         RTS
 
 IF WHILE
-; Shared loop-condition evaluator (UNTIL, WHILE, ENDWHILE): evaluate
-; the expression at the current text pointer, resync (includes the
+; Shared loop-condition evaluator (WHILE, ENDWHILE): evaluate the
+; expression at the current text pointer, resync (includes the
 ; Escape check via L9C55), coerce to integer; returns A = zero flag
-; of the 4-byte result (Z set = FALSE).
+; of the 4-byte result (Z set = FALSE). UNTIL below no longer shares
+; it - the Change 21 JSR/RTS pair cost 12 cycles per loop iteration,
+; re-inlined by Change 34.
 .LEVAL
-ELSE
-.LBA47
-ENDIF
         JSR     L9DF3
 
         JSR     L9C55
 
         JSR     L9781
 
-IF WHILE
-.LEVAL4
-ELSE
-        LDX     L24
-        BEQ     LBA2B
-
-ENDIF
         LDA     L2A
         ORA     L2B
         ORA     L2C
         ORA     L2D
-IF WHILE
         RTS
 
+ENDIF
 .LBA47
-        JSR     LEVAL
+        JSR     L9DF3
+
+        JSR     L9C55
+
+        JSR     L9781
 
         LDX     L24
         BEQ     LBA2B
 
-        TAY
-ENDIF
+        LDA     L2A
+        ORA     L2B
+        ORA     L2C
+        ORA     L2D
         BEQ     LBA63
 
         DEC     L24
@@ -11672,8 +11686,7 @@ ENDIF
 
 .LBAA0
         LDA     #$06
-        BRA     LBAA6
-
+        EQUB    $2C
 .LBAA4
         LDA     #$07
 .LBAA6
@@ -12555,9 +12568,7 @@ IF WHILE
 ; L2D parity distinguishes the modes ($DC even, $E1 odd).
 .LWWSC
         LDA     #$DC
-        STA     L2D
-        BRA     LWSX
-
+        EQUB    $2C
 .LWISC
         LDA     #$E1
         STA     L2D
@@ -12650,8 +12661,8 @@ IF WHILE
 ; resumption is the single-line ELSE's own (L9CED: line-number
 ; shorthand or statements). A non-ELSE first byte is re-dispatched.
 .LWEOL
-        LDY     L0A
-        LDA     (L0B),Y
+        JSR     LWGET
+
         BMI     LWNOE
 
         INY

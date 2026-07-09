@@ -13,7 +13,7 @@ earns its keep, and the architecture is clean enough that forty years
 later the whole ROM can be read, understood, and reassembled from a
 single annotated source file. It is a masterclass in economy.
 
-This memo describes 33 changes to the ROM, targeting the 65C02.
+This memo describes 34 changes to the ROM, targeting the 65C02.
 The speed features (11, 13, 14, 19, part of 20) and the WHILE/ENDWHILE
 extension (Change 21) are mutually exclusive in the 16K image, so the
 source builds two variants, gated on the WHILE assembly symbol (see
@@ -1326,6 +1326,60 @@ PASS=55 FAIL=0.
 
 ---
 
+## Change 34: mine the immediate-mode commands, restore the hot paths
+
+**Location:** mining - L8FC5 (OLD), LAFEE (PROC/FN definition scan),
+six two-entry constant loaders (MOVE/DRAW, line-number print, FP
+scratch pointer, EXT#/PTR#, the OPENIN/OPENOUT/OPENUP chain, the
+input-buffer selector), and the while scanner entries; restoration -
+L97A9, L9AE6 x2, L97D2 (fast, gated), LB39E and LBA47 (while).
+
+The immediate-mode commands (AUTO, DELETE, EDIT, LIST, LOAD, NEW,
+OLD, RENUMBER, SAVE, CHAIN, RUN) and their support code can absorb
+any cycle cost, so they were mined for bytes to buy back the
+remaining funding merges that still cost cycles on hot paths:
+
+Mining (-16 shared, -4 while-only):
+- OLD's point-at-PAGE setup folds into the existing L943E helper
+  (-3).
+- The definition scan's line-advance tail at LAFEE duplicated the
+  12-byte advance that Change 12's L9CB8 already provides; calling it
+  instead (-6) also gains the Escape check during a long scan.
+- Six `LDA #x / BRA join / LDA #y` two-entry loaders become
+  `LDA #x / EQUB $2C / LDA #y` - the $2C (BIT abs) swallows the
+  second load as its operand, +1 cycle on cold entry paths (-7; a
+  seventh candidate sits in the pinned tail and is left alone). The
+  while scanner's LWWSC/LWISC entries take the same trick plus the
+  now-dead STA/BRA (-3), and LWEOL's peek folds into LWGET (-1).
+
+Restoration (+15 fast, +20 while):
+- Fast: the three Change 26/20 merges on warm statement paths are
+  re-inlined behind WHILE=0 gates - LCPYW on the PROC/FN dispatch
+  (12 cycles per call), LPO39 twice in the string-function argument
+  fetch, and LST27 in PROC argument binding.
+- While: UNTIL carries the LEVAL body inline again (12 cycles per
+  REPEAT iteration; LEVAL remains for WHILE/ENDWHILE, the feature's
+  own machinery), and the LB39E real-store sign-pack is inline in
+  both variants (12 cycles per float variable store; LSGNP keeps its
+  pinned LBF66 stash and its cold LA54D caller).
+
+The while variant still carries the three fast-gated merges above
+(+12 cycles each on PROC dispatch, PROC argument binding, and
+string-function argument fetch) - the pool ran out at 2, and those
+paths are an order of magnitude colder than UNTIL and the float
+store.
+
+**Measured:** fast - STEST PASS=55, ClockSp Procedure call
+2.86 -> 2.89, average 2.94; while - STEST PASS=55 with B4 677 -> 674
+(the UNTIL cycles, exactly 3cs over 5000 iterations), WTEST 15/0,
+ITEST 26/0, ClockSp Real/Variant REPEAT 2.34 -> 2.36, average
+2.75 -> 2.76. Cold-command battery (RENUMBER refs+headers, DELETE,
+AUTO with Escape exit, LIST/LISTO, OLD, RUN, CHAIN BSEARCH, OPENIN/
+OPENOUT/OPENUP, PTR#/EXT#, MOVE/DRAW/PLOT, INPUT, No REPEAT) all
+pass on the edited handlers.
+
+---
+
 ## Free-space pool and the pinned tail (SKIPTO scheme)
 
 The bytes freed by Changes 15–18 are absorbed by a `SKIPTO &BE95`
@@ -1468,20 +1522,23 @@ the battery.
 | 31 | LB057 cache | -57 | fast only: PROC/FN call-site cache, ClockSp PROC +31% |
 | 32 | L9DF3/L9CD6/(L04) | -24 | while only: re-inline 3 of 4 funding merges |
 | 33 | L9C6A | +6 spent | fast only: statement-advance entry fast path |
-| | (SKIPTO pool) | +2 while / +7 fast | |
+| 34 | immediate commands | -16 mined, spent | hot-path restores: UNTIL, float store (while); PROC, string fns (fast) |
+| | (SKIPTO pool) | +2 while / +8 fast | |
 
 The while variant uses all 16384 bytes exactly, 2 of which are free
 in the SKIPTO pool — and that pool is fully consolidated: the dead
 Tube-check hole at LBF66 is filled to the byte by the relocated
 LSGNP with its folded LDY #$01 (Change 25), so no free byte is
-stranded in the pinned region. The fast variant's pool holds 7; its
+stranded in the pinned region. The fast variant's pool holds 8; its
 LBF66 Tube check is now dead there too (the call-4 matcher went with
 the Change 29 strip), making it an 11-byte fixed-address stash in
 both variants (occupied by LSGNP in the while variant only). The interpreter now runs at close to original 4r32 speed
-(since Change 32 the residual cost is +12 cycles on UNTIL and on two
-of the three real-store sign-pack sites), and
+(since Change 34 the residual cost is +12 cycles on PROC dispatch,
+PROC argument binding and string-function argument fetch only -
+UNTIL, the real store, IF and expression entry all run original
+code), and
 gains WHILE/ENDWHILE and full block IF/ELSE/ENDIF. Benchmarks (centiseconds, Master 128, suite
-loops): B1=318 B2=368 B3=712 B4=677.
+loops): B1=318 B2=368 B3=712 B4=674.
 
 ## Rejected / future candidates
 

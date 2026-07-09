@@ -16,7 +16,7 @@ Expected result: `PASS=55 FAIL=0` on both variants (the LN1000,
 LNFIX and ATNFIX checks assert the mathematically correct values,
 which the ROM produces since the Change 22 LN/ATN carry-bug fix).
 Benchmark expectations (centiseconds, Master 128): WHILE variant
-B1=318 B2=368 B3=712 B4=677, FAST variant B1=266 B2=319 B3=702
+B1=318 B2=368 B3=712 B4=674, FAST variant B1=266 B2=319 B3=702
 B4=625 since the Changes 28/29 resident-integer fast paths (a
 couple of centiseconds of timer jitter is normal).
 
@@ -70,7 +70,7 @@ is the speed-features variant.
    `PASS=55 FAIL=0` on both variants (the three transcendental checks
    assert the CORRECT values, since Change 22 fixed the LN/ATN carry
    bug); benchmarks (centiseconds): WHILE variant B1=318 B2=368
-   B3=712 B4=677, FAST variant B1=267 B2=336 B3=708 B4=653. On the
+   B3=712 B4=674, FAST variant B1=267 B2=319 B3=704 B4=625. On the
    WHILE variant, `*EXEC WTEST` runs the WHILE/ENDWHILE battery
    (expect `PASS=15 FAIL=0`) and `*EXEC ITEST` the block
    IF/ELSE/ENDIF battery of Changes 24/27 (expect `PASS=26 FAIL=0`).
